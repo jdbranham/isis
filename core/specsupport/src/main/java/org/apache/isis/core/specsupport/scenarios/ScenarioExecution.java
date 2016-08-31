@@ -35,6 +35,7 @@ import org.apache.isis.applib.services.wrapper.WrapperFactory;
 import org.apache.isis.core.commons.authentication.AuthenticationSession;
 import org.apache.isis.core.metamodel.exceptions.MetaModelException;
 
+import static org.junit.Assert.fail;
 
 /**
  * Represents the currently executing scenario, allowing information to be shared 
@@ -72,7 +73,7 @@ public abstract class ScenarioExecution {
     public static ScenarioExecution current() {
         final ScenarioExecution execution = current.get();
         if(execution == null) {
-            throw new IllegalStateException("Scenario has not yet been instantiated");
+            fail();
         } 
         return execution;
     }
@@ -130,6 +131,10 @@ public abstract class ScenarioExecution {
      * <p>
      * Because integration tests cache services in the session, this method should typically be followed by
      * calls to {@link #closeSession() close} the current session and then to re-{@link #openSession() open} a new one.
+     *
+     * <p>
+     *     TODO: I'm not convinced this works reliably...
+     * </p>
      */
     public <T> void replaceService(T original, T replacement) {
         dsp.replaceService(original, replacement);

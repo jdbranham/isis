@@ -25,6 +25,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import org.apache.isis.applib.services.eventbus.ActionDomainEvent;
+import org.apache.isis.applib.services.publish.PublisherService;
 
 /**
  * Domain semantics for domain object collection.
@@ -44,20 +45,23 @@ public @interface Action {
      * </p>
      *
      * <pre>
-     * public static class StartDateChangedEvent extends ActionDomainEvent { ... }
+     * public class SomeObject{
+     *     public static class ChangeStartDateDomainEvent extends ActionDomainEvent&lt;SomeObject&gt; { ... }
      *
-     * &#64;Action(domainEvent=StartDateChangedEvent.class)
-     * public void changeStartDate(final Date startDate) { ...}
+     *     &#64;Action(domainEvent=ChangedStartDateDomainEvent.class)
+     *     public void changeStartDate(final Date startDate) { ...}
+     *     ...
+     * }
      * </pre>
+     *
+     * <p>
+     * This subclass must provide a no-arg constructor; the fields are set reflectively.
+     * </p>
      *
      * <p>
      * Only domain services should be registered as subscribers; only domain services are guaranteed to be instantiated and
      * resident in memory.  The typical implementation of a domain service subscriber is to identify the impacted entities,
      * load them using a repository, and then to delegate to the event to them.
-     * </p>
-     *
-     * <p>
-     * This subclass must provide a no-arg constructor; the fields are set reflectively.
      * </p>
      */
     Class<? extends ActionDomainEvent<?>> domainEvent() default ActionDomainEvent.Default.class;
@@ -66,7 +70,7 @@ public @interface Action {
     // //////////////////////////////////////
 
     /**
-     * Indicates when the action is not visible to the user.
+     * Indicates where (in the UI) the action is not visible to the user.
      *
      * <p>
      * It is also possible to suppress an action's visibility using {@link ActionLayout#hidden()}.
@@ -85,7 +89,7 @@ public @interface Action {
 
 
     /**
-     * The action semantics, either {@link SemanticsOf#SAFE safe} (query-only),
+     * The action semantics, either {@link SemanticsOf#SAFE_AND_REQUEST_CACHEABLE cached}, {@link SemanticsOf#SAFE safe} (query-only),
      * {@link SemanticsOf#IDEMPOTENT idempotent} or
      * {@link SemanticsOf#NON_IDEMPOTENT non-idempotent}.
      */
@@ -144,17 +148,19 @@ public @interface Action {
 
 
     /**
-     * Whether changes to the object should be published.
+     * Whether the action invocation should be published.
      *
      * <p>
-     * Requires that an implementation of the {@link org.apache.isis.applib.services.publish.PublishingService} is
-     * registered with the framework.
+     * Requires that an implementation of the {@link org.apache.isis.applib.services.publish.PublishingService}
+     * or {@link org.apache.isis.applib.services.publish.PublisherService} is registered with the framework.
      * </p>
      */
     Publishing publishing() default Publishing.AS_CONFIGURED;
 
-
-    // TODO: factor out PayloadFactory.Default so similar to interaction
+    /**
+     * @deprecated - not supported by {@link PublisherService}.
+     */
+    @Deprecated
     Class<? extends PublishingPayloadFactoryForAction> publishingPayloadFactory() default PublishingPayloadFactoryForAction.class;
 
 

@@ -17,7 +17,7 @@
   specific language governing permissions and limitations
   under the License.
 -->
-<archetype-descriptor xmlns="http://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.0.0" xsi:schemaLocation="http://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.0.0 http://maven.apache.org/xsd/archetype-descriptor-1.0.0.xsd" name="simpleapp" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<archetype-descriptor xmlns="http://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.0.0" name="simpleapp" xsi:schemaLocation="http://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.0.0 http://maven.apache.org/xsd/archetype-descriptor-1.0.0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <fileSets>
         <fileSet encoding="UTF-8">
             <directory/>
@@ -28,20 +28,36 @@
         </fileSet>
     </fileSets>
     <modules>
-        <module id="${rootArtifactId}-dom" dir="dom" name="${rootArtifactId}-dom">
+        <module name="${rootArtifactId}-app" id="${rootArtifactId}-app" dir="app">
             <fileSets>
                 <fileSet filtered="true" encoding="UTF-8">
                     <directory>src/main/java</directory>
                     <includes>
-                        <include>**/*.xml</include>
                         <include>**/*.java</include>
+                        <include>**/*.xml</include>
                     </includes>
                 </fileSet>
                 <fileSet encoding="UTF-8">
                     <directory>src/main/java</directory>
                     <includes>
                         <include>**/*.png</include>
-                        <include>**/*.json</include>
+                    </includes>
+                </fileSet>
+            </fileSets>
+        </module>
+        <module name="${rootArtifactId}-dom" id="${rootArtifactId}-dom" dir="dom">
+            <fileSets>
+                <fileSet filtered="true" encoding="UTF-8">
+                    <directory>src/main/java</directory>
+                    <includes>
+                        <include>**/*.java</include>
+                        <include>**/*.xml</include>
+                    </includes>
+                </fileSet>
+                <fileSet encoding="UTF-8">
+                    <directory>src/main/java</directory>
+                    <includes>
+                        <include>**/*.png</include>
                     </includes>
                 </fileSet>
                 <fileSet filtered="true" encoding="UTF-8">
@@ -57,14 +73,37 @@
                     </includes>
                 </fileSet>
                 <fileSet filtered="true" encoding="UTF-8">
+                    <directory>gradle/wrapper</directory>
+                    <includes>
+                        <include>**/*.properties</include>
+                    </includes>
+                </fileSet>
+                <fileSet encoding="UTF-8">
+                    <directory>gradle/wrapper</directory>
+                    <includes>
+                        <include>**/*.jar</include>
+                    </includes>
+                </fileSet>
+                <fileSet filtered="true" encoding="UTF-8">
                     <directory/>
                     <includes>
                         <include>log4j.properties</include>
                     </includes>
                 </fileSet>
+                <fileSet encoding="UTF-8">
+                    <directory/>
+                    <includes>
+                        <include>.gitignore</include>
+                        <include>build.gradle</include>
+                        <include>gradlew</include>
+                        <include>gradlew.bat</include>
+                        <include>layouts.gradle</include>
+                        <include>liveReload.gradle</include>
+                    </includes>
+                </fileSet>
             </fileSets>
         </module>
-        <module id="${rootArtifactId}-fixture" dir="fixture" name="${rootArtifactId}-fixture">
+        <module name="${rootArtifactId}-fixture" id="${rootArtifactId}-fixture" dir="fixture">
             <fileSets>
                 <fileSet filtered="true" encoding="UTF-8">
                     <directory>src/main/java</directory>
@@ -74,7 +113,7 @@
                 </fileSet>
             </fileSets>
         </module>
-        <module id="${rootArtifactId}-integtests" dir="integtests" name="${rootArtifactId}-integtests">
+        <module name="${rootArtifactId}-integtests" id="${rootArtifactId}-integtests" dir="integtests">
             <fileSets>
                 <fileSet filtered="true" encoding="UTF-8">
                     <directory>src/test/java</directory>
@@ -103,7 +142,7 @@
                 </fileSet>
             </fileSets>
         </module>
-        <module id="${rootArtifactId}-webapp" dir="webapp" name="${rootArtifactId}-webapp">
+        <module name="${rootArtifactId}-webapp" id="${rootArtifactId}-webapp" dir="webapp">
             <fileSets>
                 <fileSet filtered="true" encoding="UTF-8">
                     <directory>src/main/java</directory>
@@ -112,17 +151,18 @@
                     </includes>
                 </fileSet>
                 <fileSet filtered="true" encoding="UTF-8">
-                    <directory>src/main/webapp</directory>
+                    <directory>src/main/resources</directory>
                     <includes>
-                        <include>**/*.xml</include>
                         <include>**/*.html</include>
                         <include>**/*.properties</include>
                     </includes>
                 </fileSet>
                 <fileSet filtered="true" encoding="UTF-8">
-                    <directory>src/main/resources</directory>
+                    <directory>src/main/webapp</directory>
                     <includes>
+                        <include>**/*.xml</include>
                         <include>**/*.html</include>
+                        <include>**/*.properties</include>
                     </includes>
                 </fileSet>
                 <fileSet encoding="UTF-8">
@@ -135,19 +175,19 @@
                 <fileSet encoding="UTF-8">
                     <directory>src/main/webapp</directory>
                     <includes>
+                        <include>**/*.css</include>
+                        <include>**/*.gif</include>
+                        <include>**/*.ini</include>
                         <include>**/*.png</include>
                         <include>**/*.js</include>
                         <include>**/*.po</include>
-                        <include>**/*.ini</include>
-                        <include>**/*.gif</include>
-                        <include>**/*.css</include>
                     </includes>
                 </fileSet>
                 <fileSet filtered="true" encoding="UTF-8">
                     <directory>ide/intellij</directory>
                     <includes>
-                        <include>**/*.xml</include>
                         <include>**/*.txt</include>
+                        <include>**/*.xml</include>
                     </includes>
                 </fileSet>
                 <fileSet encoding="UTF-8">
@@ -159,6 +199,7 @@
                 <fileSet filtered="true" encoding="UTF-8">
                     <directory>ide/eclipse</directory>
                     <includes>
+                        <include>**/*.gitignore</include>
                         <include>**/*.launch</include>
                     </includes>
                 </fileSet>

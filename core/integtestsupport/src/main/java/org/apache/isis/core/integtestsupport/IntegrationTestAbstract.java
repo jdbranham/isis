@@ -19,17 +19,26 @@
 package org.apache.isis.core.integtestsupport;
 
 import java.util.List;
+
 import com.google.common.base.Throwables;
+
 import org.junit.Rule;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.MethodRule;
 import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.Statement;
+
 import org.apache.isis.applib.DomainObjectContainer;
 import org.apache.isis.applib.NonRecoverableException;
 import org.apache.isis.applib.RecoverableException;
+import org.apache.isis.applib.fixtures.FixtureClock;
 import org.apache.isis.applib.fixturescripts.FixtureScript;
+import org.apache.isis.applib.services.clock.ClockService;
+import org.apache.isis.applib.services.registry.ServiceRegistry;
+import org.apache.isis.applib.services.scratchpad.Scratchpad;
+import org.apache.isis.applib.services.sessmgmt.SessionManagementService;
 import org.apache.isis.applib.services.wrapper.WrapperFactory;
+import org.apache.isis.applib.services.xactn.TransactionService;
 import org.apache.isis.core.specsupport.scenarios.ScenarioExecution;
 import org.apache.isis.core.specsupport.specs.CukeGlueAbstract;
 import org.apache.isis.core.unittestsupport.jmocking.JUnitRuleMockery2;
@@ -52,6 +61,10 @@ import org.apache.isis.core.unittestsupport.jmocking.JUnitRuleMockery2.Mode;
  */
 public abstract class IntegrationTestAbstract {
 
+    /**
+     * @deprecated - just inject domain services into test instead.
+     */
+    @Deprecated
     protected static ScenarioExecution scenarioExecution() {
         return ScenarioExecution.current();
     }
@@ -60,46 +73,26 @@ public abstract class IntegrationTestAbstract {
 
   
     /**
-     * Intended to be called whenever there is a logically distinct interaction
-     * with the system.
-     *
-     * <p>
-     *     Each transaction has its own instances of request-scoped services, most notably
-     *     the {@link org.apache.isis.applib.services.command.Command}.
-     * </p>
-     * 
-     * <p>
-     *     (Unlike {@link #nextSession()}), it <i>is</i> valid to hold references to objects across transactions.
-     * </p>
-     *
-     * @see #nextRequest()
-     * @see #nextSession()
+     * @deprecated - instead just inject {@link TransactionService} into test and use {@link TransactionService#nextTransaction()} instead.
      */
+    @Deprecated
     protected void nextTransaction() {
         scenarioExecution().endTran(true);
         scenarioExecution().beginTran();
     }
 
     /**
-     * Synonym for {@link #nextTransaction()}.
-     *
-     * @see #nextTransaction()
-     * @see #nextSession()
+     * @deprecated - instead just inject {@link SessionManagementService} or {@link TransactionService} into test and use either {@link SessionManagementService#nextSession()} or {@link TransactionService#nextTransaction()} instead.
      */
+    @Deprecated
     protected void nextRequest() {
         nextTransaction();
     }
 
     /**
-     * Completes the transaction and session, then opens another session and transaction.
-     *
-     * <p>
-     *     Note that any references to objects must be discarded and reacquired.
-     * </p>
-     *
-     * @see #nextTransaction()
-     * @see #nextRequest()
+     * @deprecated - instead just inject {@link SessionManagementService} into test and use {@link SessionManagementService#nextSession()} instead.
      */
+    @Deprecated
     protected void nextSession() {
         scenarioExecution().endTran(true);
         scenarioExecution().closeSession();
@@ -107,54 +100,69 @@ public abstract class IntegrationTestAbstract {
         scenarioExecution().beginTran();
     }
 
+    /**
+     * If just require the current time, use {@link ClockService}.
+     */
+    protected FixtureClock getFixtureClock() {
+        return ((FixtureClock)FixtureClock.getInstance());
+    }
+
+
     // //////////////////////////////////////
 
     
     /**
-     * Convenience method
+     * @deprecated - just inject {@link Scratchpad} service into test and use {@link Scratchpad#get(Object)} instead.
      */
-    public Object getVar(String type, String id) {
+    @Deprecated
+    public Object getVar(final String type, final String id) {
         return scenarioExecution().getVar(type, id);
     }
 
     /**
-     * Convenience method
+     * @deprecated - just inject {@link Scratchpad} service into test and use {@link Scratchpad#get(Object)} instead.
      */
-    public <X> X getVar(String type, String id, Class<X> cls) {
+    @Deprecated
+    public <X> X getVar(final String type, final String id, final Class<X> cls) {
         return scenarioExecution().getVar(type, id ,cls);
     }
 
     /**
-     * Convenience method
+     * @deprecated - just inject {@link Scratchpad} service into test and use {@link Scratchpad#put(Object, Object)} instead.
      */
-    public void putVar(String type, String id, Object value) {
+    @Deprecated
+    public void putVar(final String type, final String id, final Object value) {
         scenarioExecution().putVar(type, id, value);
     }
-    
+
     /**
-     * Convenience method
+     * @deprecated - just inject {@link Scratchpad} service into test and use {@link Scratchpad#put(Object, Object)} (setting to <tt>null</tt>) instead.
      */
-    public void removeVar(String type, String id) {
+    @Deprecated
+    public void removeVar(final String type, final String id) {
         scenarioExecution().removeVar(type, id);
     }
 
     /**
-     * Convenience method
+     * @deprecated - instead just inject service into test; optionally use {@link ServiceRegistry} service to lookup other services.
      */
-    protected <T> T service(Class<T> cls) {
+    @Deprecated
+    protected <T> T service(final Class<T> cls) {
         return scenarioExecution().service(cls);
     }
     
     /**
-     * Convenience method
+     * @deprecated - instead just inject {@link org.apache.isis.applib.DomainObjectContainer} into test.
      */
+    @Deprecated
     protected DomainObjectContainer container() {
         return scenarioExecution().container();
     }
     
     /**
-     * Convenience method
+     * @deprecated - instead just inject {@link org.apache.isis.applib.services.wrapper.WrapperFactory} into test.
      */
+    @Deprecated
     protected WrapperFactory wrapperFactory() {
         return scenarioExecution().wrapperFactory();
     }
@@ -162,17 +170,23 @@ public abstract class IntegrationTestAbstract {
     /**
      * Convenience method
      */
-    protected <T> T wrap(T obj) {
+    protected <T> T wrap(final T obj) {
         return scenarioExecution().wrapperFactory().wrap(obj);
     }
 
     /**
      * Convenience method
      */
-    protected <T> T unwrap(T obj) {
+    protected <T> T unwrap(final T obj) {
         return scenarioExecution().wrapperFactory().unwrap(obj);
     }
 
+    /**
+     * Convenience method
+     */
+    protected <T> T mixin(final Class<T> mixinClass, final Object mixedIn) {
+        return container().mixin(mixinClass, mixedIn);
+    }
 
     
     // //////////////////////////////////////
@@ -198,11 +212,12 @@ public abstract class IntegrationTestAbstract {
                     try {
                         base.evaluate();
                         isft.endTran();
-                    } catch(Throwable e) {
-                        isft.bounceSystem();
+                        isft.nextSession();
+                    } catch(final Throwable e) {
+                        isft.nextSession();
                         final List<Throwable> causalChain = Throwables.getCausalChain(e);
                         // if underlying cause is an applib-defined exception, throw that rather than Isis' wrapper exception
-                        for (Throwable cause : causalChain) {
+                        for (final Throwable cause : causalChain) {
                             if(cause instanceof RecoverableException ||
                                cause instanceof NonRecoverableException) {
                                 throw cause;
@@ -225,7 +240,7 @@ public abstract class IntegrationTestAbstract {
      * @deprecated  - just inject {@link org.apache.isis.applib.fixturescripts.FixtureScripts} service for your application, and call.  If multiple fixture scripts, create an anonymous subclass of {@link org.apache.isis.applib.fixturescripts.FixtureScript} and override {@link org.apache.isis.applib.fixturescripts.FixtureScript#execute(org.apache.isis.applib.fixturescripts.FixtureScript.ExecutionContext)} execute.
      */
     @Deprecated
-    protected static void runScript(FixtureScript... fixtureScripts) {
+    protected static void runScript(final FixtureScript... fixtureScripts) {
         scenarioExecution().install(fixtureScripts);
     }
 
@@ -237,5 +252,8 @@ public abstract class IntegrationTestAbstract {
 
     @Rule
     public ExpectedException expectedExceptions = ExpectedException.none();
+
+    @Rule
+    public ExceptionRecognizerTranslate exceptionRecognizerTranslations = ExceptionRecognizerTranslate.create();
 }
 

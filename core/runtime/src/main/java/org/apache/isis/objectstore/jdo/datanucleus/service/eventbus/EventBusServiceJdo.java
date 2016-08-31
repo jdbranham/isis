@@ -17,6 +17,7 @@
 package org.apache.isis.objectstore.jdo.datanucleus.service.eventbus;
 
 import org.apache.isis.applib.annotation.DomainService;
+import org.apache.isis.applib.annotation.DomainServiceLayout;
 import org.apache.isis.applib.annotation.NatureOfService;
 import org.apache.isis.applib.annotation.Programmatic;
 import org.apache.isis.core.runtime.services.eventbus.EventBusServiceDefault;
@@ -24,8 +25,10 @@ import org.apache.isis.objectstore.jdo.datanucleus.JDOStateManagerForIsis;
 import org.apache.isis.objectstore.jdo.datanucleus.JDOStateManagerForIsis.Hint;
 
 /**
- * This domain service that enables both the framework and application code to publish events through a Guava
- * {@link com.google.common.eventbus.EventBus} instance.
+ * This domain service that enables both the framework and application code to publish events through either a
+ * Guava {@link com.google.common.eventbus.EventBus} instance or through an Axon
+ * {@link org.axonframework.eventhandling.SimpleEventBus} instance.
+
  *
  * <p>
  * In addition, this implementation is &quot;JDO-aware&quot; meaning that it allows events to be
@@ -39,6 +42,9 @@ import org.apache.isis.objectstore.jdo.datanucleus.JDOStateManagerForIsis.Hint;
  */
 @DomainService(
         nature = NatureOfService.DOMAIN
+)
+@DomainServiceLayout(
+        menuOrder = "0" // initialize first, so available for any services that persist objects in their @PostConstruct
 )
 public class EventBusServiceJdo extends EventBusServiceDefault {
 

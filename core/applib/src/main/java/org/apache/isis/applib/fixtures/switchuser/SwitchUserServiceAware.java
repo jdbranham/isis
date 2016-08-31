@@ -19,16 +19,19 @@
 
 package org.apache.isis.applib.fixtures.switchuser;
 
-import org.apache.isis.applib.fixtures.AbstractFixture;
+import org.apache.isis.applib.services.sudo.SudoService;
 
 /**
  * Implement if require {@link SwitchUserService} to be injected into fixture.
- * 
- * <p>
- * Most fixtures will subclass from {@link AbstractFixture} which does indeed
- * implement this interface.
+ *
+ * @deprecated - use instead {@link SudoService}
  */
+@Deprecated
 public interface SwitchUserServiceAware {
 
+    /**
+     * @deprecated - use instead {@link SudoService}
+     */
+    @Deprecated
     void setService(SwitchUserService switchUserService);
 }

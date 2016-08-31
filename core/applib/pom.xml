@@ -23,49 +23,16 @@
     <parent>
         <groupId>org.apache.isis.core</groupId>
         <artifactId>isis</artifactId>
-        <version>1.9.0-SNAPSHOT</version>
+        <version>1.14.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>isis-core-applib</artifactId>
 
-    <name>Isis Core AppLib</name>
+    <name>Apache Isis AppLib</name>
     <description>
         Isis application library, defining annotations and utilities for the
         default (Java) programming model.
     </description>
-
-    <properties>
-        <siteBaseDir>..</siteBaseDir>
-        <relativeUrl>applib/</relativeUrl>
-    </properties>
-
-    <!-- used in Site generation for relative references. -->
-    <url>http://isis.apache.org/${relativeUrl}</url>
-
-    <reporting>
-        <excludeDefaults>true</excludeDefaults>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-project-info-reports-plugin</artifactId>
-                <inherited>false</inherited>
-                <configuration>
-                    <dependencyLocationsEnabled>false</dependencyLocationsEnabled>
-                </configuration>
-                <reportSets>
-                    <reportSet>
-                        <inherited>true</inherited>
-                        <reports>
-                            <report>dependencies</report>
-                            <report>dependency-convergence</report>
-                            <report>plugins</report>
-                            <report>summary</report>
-                        </reports>
-                    </reportSet>
-                </reportSets>
-            </plugin>
-        </plugins>
-    </reporting>
 
     <build>
         <resources>
@@ -84,25 +51,6 @@
                 </excludes>
             </resource>
         </resources>
-        <plugins>
-            <plugin>
-                <groupId>org.datanucleus</groupId>
-                <artifactId>datanucleus-maven-plugin</artifactId>
-                <version>${datanucleus-maven-plugin.version}</version>
-                <configuration>
-                    <fork>false</fork>
-                    <verbose>true</verbose>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>compile</phase>
-                        <goals>
-                            <goal>enhance</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
         <pluginManagement>
             <plugins>
                 <!--This plugin's configuration is used to store Eclipse m2e settings only. It has no influence on the Maven build itself.-->
@@ -142,8 +90,8 @@
 
     <dependencies>
         <dependency>
-            <groupId>joda-time</groupId>
-            <artifactId>joda-time</artifactId>
+            <groupId>org.apache.isis.core</groupId>
+            <artifactId>isis-core-schema</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.geronimo.specs</groupId>
@@ -155,21 +103,32 @@
         </dependency>
         <dependency>
             <groupId>org.apache.geronimo.specs</groupId>
+            <artifactId>geronimo-jta_1.1_spec</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.geronimo.specs</groupId>
             <artifactId>geronimo-jcdi_1.0_spec</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.jboss.spec.javax.ws.rs</groupId>
+            <artifactId>jboss-jaxrs-api_2.0_spec</artifactId>
+        </dependency>
 
+        <!-- DataNucleus' standard JDO support -->
+        <dependency>
+            <groupId>javax.jdo</groupId>
+            <artifactId>jdo-api</artifactId>
+        </dependency>
 
-        <!-- DataNucleus (jdo-api, and for enhancer) -->
+        <!-- DataNucleus' (proprietary) type-safe query support-->
         <dependency>
             <groupId>org.datanucleus</groupId>
-            <artifactId>datanucleus-accessplatform-jdo-rdbms</artifactId>
-            <type>pom</type>
+            <artifactId>datanucleus-api-jdo</artifactId>
         </dependency>
         <dependency>
             <groupId>org.datanucleus</groupId>
-            <artifactId>datanucleus-jodatime</artifactId>
+            <artifactId>datanucleus-jdo-query</artifactId>
         </dependency>
-
 
         <dependency>
             <groupId>org.apache.isis.core</groupId>
@@ -181,7 +140,6 @@
         <dependency>
             <groupId>org.reflections</groupId>
             <artifactId>reflections</artifactId>
-            <optional>true</optional>
         </dependency>
 
     </dependencies>

@@ -19,7 +19,6 @@
 
 package org.apache.isis.core.runtime.memento;
 
-import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 
@@ -28,31 +27,28 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.isis.core.commons.debug.DebugBuilder;
-import org.apache.isis.core.commons.encoding.DataInputStreamExtended;
-import org.apache.isis.core.commons.encoding.DataOutputStreamExtended;
 import org.apache.isis.core.commons.ensure.Assert;
 import org.apache.isis.core.commons.exceptions.IsisException;
 import org.apache.isis.core.commons.exceptions.UnknownTypeException;
 import org.apache.isis.core.metamodel.adapter.ObjectAdapter;
-import org.apache.isis.core.metamodel.adapter.mgr.AdapterManager;
 import org.apache.isis.core.metamodel.adapter.oid.Oid;
-import org.apache.isis.core.metamodel.adapter.oid.ParentedOid;
-import org.apache.isis.core.metamodel.adapter.oid.TypedOid;
-import org.apache.isis.core.metamodel.facets.propcoll.accessor.PropertyOrCollectionAccessorFacet;
+import org.apache.isis.core.metamodel.adapter.oid.OidMarshaller;
+import org.apache.isis.core.metamodel.adapter.oid.RootOid;
+import org.apache.isis.core.metamodel.consent.InteractionInitiatedBy;
 import org.apache.isis.core.metamodel.facets.collections.modify.CollectionFacet;
 import org.apache.isis.core.metamodel.facets.collections.modify.CollectionFacetUtils;
 import org.apache.isis.core.metamodel.facets.object.encodeable.EncodableFacet;
+import org.apache.isis.core.metamodel.facets.propcoll.accessor.PropertyOrCollectionAccessorFacet;
 import org.apache.isis.core.metamodel.facets.properties.update.modify.PropertySetterFacet;
 import org.apache.isis.core.metamodel.spec.ObjectSpecification;
-import org.apache.isis.core.metamodel.spec.SpecificationLoaderSpi;
+import org.apache.isis.core.metamodel.specloader.SpecificationLoader;
 import org.apache.isis.core.metamodel.spec.feature.Contributed;
 import org.apache.isis.core.metamodel.spec.feature.ObjectAssociation;
 import org.apache.isis.core.metamodel.spec.feature.OneToManyAssociation;
 import org.apache.isis.core.metamodel.spec.feature.OneToOneAssociation;
-import org.apache.isis.core.runtime.persistence.PersistorUtil;
 import org.apache.isis.core.runtime.system.context.IsisContext;
 import org.apache.isis.core.runtime.system.persistence.PersistenceSession;
+import org.apache.isis.core.runtime.system.session.IsisSessionFactory;
 
 /**
  * Holds the state for the specified object in serializable form.
@@ -64,10 +60,13 @@ import org.apache.isis.core.runtime.system.persistence.PersistenceSession;
  */
 public class Memento implements Serializable {
 
-    private final static long serialVersionUID = 1L;
     private final static Logger LOG = LoggerFactory.getLogger(Memento.class);
+    private final static long serialVersionUID = 1L;
+
+    private final static OidMarshaller OID_MARSHALLER = OidMarshaller.INSTANCE;
 
     private final List<Oid> transientObjects = Lists.newArrayList();
+
 
     private Data data;
 
@@ -104,14 +103,15 @@ public class Memento implements Serializable {
             collData[i++] = createReferenceData(ref);
         }
         final String elementTypeSpecName = adapter.getSpecification().getFullIdentifier();
-        return new CollectionData(adapter.getOid(), elementTypeSpecName, collData);
+        return new CollectionData(clone(adapter.getOid()), elementTypeSpecName, collData);
     }
 
     private ObjectData createObjectData(final ObjectAdapter adapter) {
-        transientObjects.add(adapter.getOid());
+        final Oid adapterOid = clone(adapter.getOid());
+        transientObjects.add(adapterOid);
         final ObjectSpecification cls = adapter.getSpecification();
         final List<ObjectAssociation> associations = cls.getAssociations(Contributed.EXCLUDED);
-        final ObjectData data = new ObjectData(adapter.getOid(), cls.getFullIdentifier());
+        final ObjectData data = new ObjectData(adapterOid, cls.getFullIdentifier());
         for (int i = 0; i < associations.size(); i++) {
             if (associations.get(i).isNotPersisted()) {
                 if (associations.get(i).isOneToManyAssociation()) {
@@ -130,14 +130,14 @@ public class Memento implements Serializable {
     private void createAssociationData(final ObjectAdapter adapter, final ObjectData data, final ObjectAssociation objectAssoc) {
         Object assocData;
         if (objectAssoc.isOneToManyAssociation()) {
-            final ObjectAdapter collAdapter = objectAssoc.get(adapter);
+            final ObjectAdapter collAdapter = objectAssoc.get(adapter, InteractionInitiatedBy.FRAMEWORK);
             assocData = createCollectionData(collAdapter);
         } else if (objectAssoc.getSpecification().isEncodeable()) {
             final EncodableFacet facet = objectAssoc.getSpecification().getFacet(EncodableFacet.class);
-            final ObjectAdapter value = objectAssoc.get(adapter);
+            final ObjectAdapter value = objectAssoc.get(adapter, InteractionInitiatedBy.FRAMEWORK);
             assocData = facet.toEncodedString(value);
         } else if (objectAssoc.isOneToOneAssociation()) {
-            final ObjectAdapter referencedAdapter = ((OneToOneAssociation) objectAssoc).get(adapter);
+            final ObjectAdapter referencedAdapter = objectAssoc.get(adapter, InteractionInitiatedBy.FRAMEWORK);
             assocData = createReferenceData(referencedAdapter);
         } else {
             throw new UnknownTypeException(objectAssoc);
@@ -150,18 +150,27 @@ public class Memento implements Serializable {
             return null;
         }
 
-        final Oid refOid = referencedAdapter.getOid();
+        Oid refOid = clone(referencedAdapter.getOid());
+
         if (refOid == null) {
             return createStandaloneData(referencedAdapter);
         }
 
-        if ((referencedAdapter.getSpecification().isParented() || refOid.isTransient()) && !transientObjects.contains(refOid)) {
+
+        if (    (referencedAdapter.getSpecification().isParented() || refOid.isTransient()) &&
+                !transientObjects.contains(refOid)) {
             transientObjects.add(refOid);
             return createObjectData(referencedAdapter);
         }
 
         final String specification = referencedAdapter.getSpecification().getFullIdentifier();
         return new Data(refOid, specification);
+    }
+
+    private static <T extends Oid> T clone(final T oid) {
+        if(oid == null) { return null; }
+        final String oidStr = oid.enString();
+        return (T) OID_MARSHALLER.unmarshal(oidStr, oid.getClass());
     }
 
     private Data createStandaloneData(final ObjectAdapter adapter) {
@@ -195,16 +204,25 @@ public class Memento implements Serializable {
         
         final Oid oid = getOid();
 		if (spec.isParentedOrFreeCollection()) {
-        	
-        	final Object recreatedPojo = spec.createObject();
-        	adapter = getPersistenceSession().getAdapterManager() .mapRecreatedPojo(oid, recreatedPojo);
+
+            final Object recreatedPojo = getPersistenceSession().instantiateAndInjectServices(spec);
+        	adapter = getPersistenceSession().mapRecreatedPojo(oid, recreatedPojo);
             populateCollection(adapter, (CollectionData) data);
             
         } else {
-        	Assert.assertTrue("oid must be a TypedOid representing an object because spec is not a collection and cannot be a value", oid instanceof TypedOid);
-        	TypedOid typedOid = (TypedOid) oid;
-        	
-			adapter = getAdapterManager().adapterFor(typedOid);
+        	Assert.assertTrue("oid must be a RootOid representing an object because spec is not a collection and cannot be a value", oid instanceof RootOid);
+        	RootOid typedOid = (RootOid) oid;
+
+            // remove adapter if already in the adapter manager maps, because
+            // otherwise would (as a side-effect) update the version to that of the current.
+            adapter = getPersistenceSession().getAdapterFor(typedOid);
+            if(adapter != null) {
+                getPersistenceSession().removeAdapter(adapter);
+            }
+
+            // recreate an adapter for the original OID (with correct version)
+            adapter = getPersistenceSession().adapterFor(typedOid);
+
             updateObject(adapter, data);
         }
 
@@ -237,29 +255,13 @@ public class Memento implements Serializable {
         // reference to entity
         
         Oid oid = data.getOid();
-        Assert.assertTrue("can only create a reference to an entity", oid instanceof TypedOid);
+        Assert.assertTrue("can only create a reference to an entity", oid instanceof RootOid);
         
-		final TypedOid typedOid = (TypedOid) oid; 
-        if (typedOid == null) {
-            return null;
-        }
-        
-        final ObjectAdapter referencedAdapter = getAdapterManager().adapterFor(typedOid);
+		final RootOid rootOid = (RootOid) oid;
+        final ObjectAdapter referencedAdapter = getPersistenceSession().adapterFor(rootOid);
 
         if (data instanceof ObjectData) {
-        	
-        	// no longer needed
-        	//final ObjectSpecification spec = getSpecificationLoader().loadSpecification(data.getClassName());
-        	if(typedOid instanceof ParentedOid) { // equiv to spec.isParented()), I think
-        		
-        		// rather than the following, is it equivalent to pass in RESOLVING? (like everywhere else)
-//            final ResolveState targetState = ResolveState.GHOST;
-//            if (referencedAdapter.getResolveState().isValidToChangeTo(targetState)) {
-//                referencedAdapter.changeState(targetState);
-//            }
-        		
-        		updateObject(referencedAdapter, data);
-        	} else if (typedOid.isTransient()) {
+            if (rootOid.isTransient()) {
         		updateObject(referencedAdapter, data);
         	}
         }
@@ -292,16 +294,12 @@ public class Memento implements Serializable {
         boolean dataIsTransient = data.getOid().isTransient();
         
         if (!dataIsTransient) {
-            try {
-                PersistorUtil.startResolvingOrUpdating(objectAdapter);
-                updateFields(objectAdapter, data);
-            } finally {
-                PersistorUtil.toEndState(objectAdapter);
-            }
+            updateFields(objectAdapter, data);
+            objectAdapter.getOid().setVersion(data.getOid().getVersion());
         } else if (objectAdapter.isTransient() && dataIsTransient) {
             updateFields(objectAdapter, data);
             
-        } else if (objectAdapter.isParented()) {
+        } else if (objectAdapter.isParentedCollection()) {
             // this branch is kind-a wierd, I think it's to handle aggregated adapters.
             updateFields(objectAdapter, data);
             
@@ -347,7 +345,7 @@ public class Memento implements Serializable {
     }
 
     private void updateOneToManyAssociation(final ObjectAdapter objectAdapter, final OneToManyAssociation otma, final CollectionData collectionData) {
-        final ObjectAdapter collection = otma.get(objectAdapter);
+        final ObjectAdapter collection = otma.get(objectAdapter, InteractionInitiatedBy.FRAMEWORK);
         final CollectionFacet facet = CollectionFacetUtils.getCollectionFacetFromSpec(collection);
         final List<ObjectAdapter> original = Lists.newArrayList();
         for (final ObjectAdapter adapter : facet.iterable(collection)) {
@@ -361,9 +359,9 @@ public class Memento implements Serializable {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("  association " + otma + " changed, added " + elementAdapter.getOid());
                 }
-                otma.addElement(objectAdapter, elementAdapter);
+                otma.addElement(objectAdapter, elementAdapter, InteractionInitiatedBy.FRAMEWORK);
             } else {
-                otma.removeElement(objectAdapter, elementAdapter);
+                otma.removeElement(objectAdapter, elementAdapter, InteractionInitiatedBy.FRAMEWORK);
             }
         }
 
@@ -371,7 +369,7 @@ public class Memento implements Serializable {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("  association " + otma + " changed, removed " + element.getOid());
             }
-            otma.removeElement(objectAdapter, element);
+            otma.removeElement(objectAdapter, element, InteractionInitiatedBy.FRAMEWORK);
         }
     }
 
@@ -380,7 +378,7 @@ public class Memento implements Serializable {
             otoa.initAssociation(objectAdapter, null);
         } else {
             final ObjectAdapter ref = recreateReference(assocData);
-            if (otoa.get(objectAdapter) != ref) {
+            if (otoa.get(objectAdapter, InteractionInitiatedBy.FRAMEWORK) != ref) {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("  association " + otoa + " changed to " + ref.getOid());
                 }
@@ -389,24 +387,6 @@ public class Memento implements Serializable {
         }
     }
     
-    ////////////////////////////////////////////////
-    // encode, restore
-    ////////////////////////////////////////////////
-
-    public void encodedData(final DataOutputStreamExtended outputImpl) throws IOException {
-        outputImpl.writeEncodable(data);
-    }
-    
-    public void restore(final DataInputStreamExtended input) throws IOException {
-        data = input.readEncodable(Data.class);
-    }
-
-
-    public static Memento recreateFrom(DataInputStreamExtended input) throws IOException {
-        final Memento memento = new Memento(null);
-        memento.restore(input);
-        return memento;
-    }
 
 
     // ///////////////////////////////////////////////////////////////
@@ -418,26 +398,20 @@ public class Memento implements Serializable {
         return "[" + (data == null ? null : data.getClassName() + "/" + data.getOid() + data) + "]";
     }
 
-    public void debug(final DebugBuilder debug) {
-        if (data != null) {
-            data.debug(debug);
-        }
-    }
-
     // ///////////////////////////////////////////////////////////////
     // Dependencies (from context)
     // ///////////////////////////////////////////////////////////////
 
-    protected SpecificationLoaderSpi getSpecificationLoader() {
-        return IsisContext.getSpecificationLoader();
+    protected SpecificationLoader getSpecificationLoader() {
+        return getIsisSessionFactory().getSpecificationLoader();
     }
 
     protected PersistenceSession getPersistenceSession() {
-        return IsisContext.getPersistenceSession();
+        return getIsisSessionFactory().getCurrentSession().getPersistenceSession();
     }
 
-    protected AdapterManager getAdapterManager() {
-        return getPersistenceSession().getAdapterManager();
+    IsisSessionFactory getIsisSessionFactory() {
+        return IsisContext.getSessionFactory();
     }
 
 }

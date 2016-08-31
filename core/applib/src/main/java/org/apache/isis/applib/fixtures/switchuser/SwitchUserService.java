@@ -20,7 +20,10 @@
 package org.apache.isis.applib.fixtures.switchuser;
 
 import java.util.List;
+
+import org.apache.isis.applib.annotation.Programmatic;
 import org.apache.isis.applib.fixtures.AbstractFixture;
+import org.apache.isis.applib.services.sudo.SudoService;
 
 /**
  * Not intended to be used directly; decouples the {@link AbstractFixture},
@@ -30,17 +33,27 @@ import org.apache.isis.applib.fixtures.AbstractFixture;
  * <p>
  * A suitable implementation is injected into {@link AbstractFixture} when
  * installed.
+ *
+ * @deprecated - use instead {@link SudoService}.
  */
+@Deprecated
 public interface SwitchUserService {
 
     /**
      * Switches the current user with the list of specified roles.
+     *
+     * @deprecated
      */
+    @Deprecated
+    @Programmatic
     void switchUser(String username, String... roles);
 
     /**
      * Switches the current user with the list of specified roles.
+     * @deprecated
      */
+    @Deprecated
+    @Programmatic
     void switchUser(String username, List<String> roles);
 
 }

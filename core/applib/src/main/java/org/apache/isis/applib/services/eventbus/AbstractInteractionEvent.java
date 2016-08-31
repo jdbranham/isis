@@ -27,6 +27,11 @@ import org.apache.isis.applib.Identifier;
 @Deprecated
 public abstract class AbstractInteractionEvent<S> extends AbstractDomainEvent<S> {
 
+    /**
+     * If used then the framework will set state via (non-API) setters.
+     */
+    public AbstractInteractionEvent() {}
+
     public AbstractInteractionEvent(
             final S source,
             final Identifier identifier) {
@@ -87,14 +92,13 @@ public abstract class AbstractInteractionEvent<S> extends AbstractDomainEvent<S>
         }
     }
 
-    private Phase phase;
 
     /**
      * @deprecated - use {@link #getEventPhase()} instead.
      */
     @Deprecated
     public Phase getPhase() {
-        return phase;
+        return Phase.from(getEventPhase());
     }
 
     /**
@@ -102,7 +106,7 @@ public abstract class AbstractInteractionEvent<S> extends AbstractDomainEvent<S>
      */
     @Deprecated
     public void setPhase(Phase phase) {
-        this.phase = phase;
+        setEventPhase(Phase.from(phase));
     }
     //endregion
 

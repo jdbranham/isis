@@ -20,20 +20,24 @@ package org.apache.isis.core.runtime.services.email;
 
 import java.util.List;
 import java.util.Properties;
+
 import javax.activation.DataSource;
 import javax.annotation.PostConstruct;
+
 import com.google.common.base.Strings;
+
 import org.apache.commons.mail.DefaultAuthenticator;
 import org.apache.commons.mail.EmailException;
-import org.apache.commons.mail.HtmlEmail;
+import org.apache.commons.mail.ImageHtmlEmail;
+import org.apache.commons.mail.resolver.DataSourceClassPathResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.apache.isis.applib.annotation.DomainService;
 import org.apache.isis.applib.annotation.NatureOfService;
 import org.apache.isis.applib.annotation.Programmatic;
 import org.apache.isis.applib.services.email.EmailService;
 import org.apache.isis.core.commons.config.IsisConfiguration;
-import org.apache.isis.core.runtime.system.context.IsisContext;
 
 /**
  * A service that sends email notifications when specific events occur
@@ -47,7 +51,6 @@ public class EmailServiceDefault implements EmailService {
     private static final Logger LOG = LoggerFactory.getLogger(EmailServiceDefault.class);
 
     //region > constants
-
     private static final String ISIS_SERVICE_EMAIL_SENDER_ADDRESS = "isis.service.email.sender.address";
     private static final String ISIS_SERVICE_EMAIL_SENDER_PASSWORD = "isis.service.email.sender.password";
 
@@ -93,23 +96,23 @@ public class EmailServiceDefault implements EmailService {
     }
 
     protected String getSenderEmailAddress() {
-        return getConfiguration().getString(ISIS_SERVICE_EMAIL_SENDER_ADDRESS);
+        return configuration.getString(ISIS_SERVICE_EMAIL_SENDER_ADDRESS);
     }
 
     protected String getSenderEmailPassword() {
-        return getConfiguration().getString(ISIS_SERVICE_EMAIL_SENDER_PASSWORD);
+        return configuration.getString(ISIS_SERVICE_EMAIL_SENDER_PASSWORD);
     }
 
     protected String getSenderEmailHostName() {
-        return getConfiguration().getString(ISIS_SERVICE_EMAIL_SENDER_HOSTNAME, ISIS_SERVICE_EMAIL_SENDER_HOSTNAME_DEFAULT);
+        return configuration.getString(ISIS_SERVICE_EMAIL_SENDER_HOSTNAME, ISIS_SERVICE_EMAIL_SENDER_HOSTNAME_DEFAULT);
     }
 
     protected Integer getSenderEmailPort() {
-        return getConfiguration().getInteger(ISIS_SERVICE_EMAIL_PORT, ISIS_SERVICE_EMAIL_PORT_DEFAULT);
+        return configuration.getInteger(ISIS_SERVICE_EMAIL_PORT, ISIS_SERVICE_EMAIL_PORT_DEFAULT);
     }
 
     protected Boolean getSenderEmailTlsEnabled() {
-        return getConfiguration().getBoolean(ISIS_SERVICE_EMAIL_TLS_ENABLED, ISIS_SERVICE_EMAIL_TLS_ENABLED_DEFAULT);
+        return configuration.getBoolean(ISIS_SERVICE_EMAIL_TLS_ENABLED, ISIS_SERVICE_EMAIL_TLS_ENABLED_DEFAULT);
     }
     //endregion
 
@@ -128,12 +131,12 @@ public class EmailServiceDefault implements EmailService {
                         final DataSource... attachments) {
 
         try {
-
-            final HtmlEmail email = new HtmlEmail();
+            final ImageHtmlEmail email = new ImageHtmlEmail();
             email.setAuthenticator(new DefaultAuthenticator(senderEmailAddress, senderEmailPassword));
             email.setHostName(getSenderEmailHostName());
             email.setSmtpPort(senderEmailPort);
             email.setStartTLSEnabled(getSenderEmailTlsEnabled());
+            email.setDataSourceResolver(new DataSourceClassPathResolver("/", true));
 
             final Properties properties = email.getMailSession().getProperties();
 
@@ -184,12 +187,10 @@ public class EmailServiceDefault implements EmailService {
     }
     //endregion
 
-    //region > dependencies
-    protected IsisConfiguration getConfiguration() {
-        return IsisContext.getConfiguration();
-    }
+
     //endregion
 
-
+    @javax.inject.Inject
+    IsisConfiguration configuration;
 
 }

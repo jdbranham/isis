@@ -18,6 +18,15 @@
  */
 package org.apache.isis.objectstore.jdo.applib.service.exceprecog;
 
+import java.util.Map;
+
+import javax.annotation.PostConstruct;
+
+import com.google.common.base.Strings;
+
+import org.apache.isis.applib.annotation.DomainService;
+import org.apache.isis.applib.annotation.NatureOfService;
+import org.apache.isis.applib.annotation.Programmatic;
 import org.apache.isis.applib.services.exceprecog.ExceptionRecognizer;
 import org.apache.isis.applib.services.exceprecog.ExceptionRecognizerComposite;
 
@@ -25,14 +34,39 @@ import org.apache.isis.applib.services.exceprecog.ExceptionRecognizerComposite;
  * Convenience implementation of the {@link ExceptionRecognizer} domain service that
  * recognizes a number of common and non-fatal exceptions (such as unique constraint
  * violations).
- * 
+ *
  * <p>
- * If using the JDO Object store, either register in <tt>isis.properties</tt>, or
- * compose your own, out of the underlying more fine-grained {@link ExceptionRecognizer} implementations. 
+ *     Unlike most other domain services, the framework will consult <i>all</i>
+ *     registered implementations of this service (chain of responsibility pattern) (rather than
+ *     the first one found).
+ * </p>
  */
+@DomainService(
+        nature = NatureOfService.DOMAIN
+)
 public class ExceptionRecognizerCompositeForJdoObjectStore extends ExceptionRecognizerComposite {
 
-    public ExceptionRecognizerCompositeForJdoObjectStore() {
+    public static final String KEY_DISABLE = "isis.services.ExceptionRecognizerCompositeForJdoObjectStore.disable";
+
+    @Programmatic
+    @PostConstruct
+    public void init(Map<String,String> properties) {
+        final boolean disabled = getElseFalse(properties, KEY_DISABLE);
+        if(disabled) {
+            return;
+        }
+
+        addChildren();
+
+        super.init(properties);
+    }
+
+    private static boolean getElseFalse(final Map<String, String> properties, final String key) {
+        final String value = properties.get(key);
+        return !Strings.isNullOrEmpty(value) && Boolean.parseBoolean(value);
+    }
+
+    protected void addChildren() {
         // most specific ones first
         add(new ExceptionRecognizerForSQLIntegrityConstraintViolationUniqueOrIndexException());
         add(new ExceptionRecognizerForJDODataStoreExceptionIntegrityConstraintViolationForeignKeyNoActionException());

@@ -22,83 +22,109 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.ws.rs.core.*;
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Request;
+import javax.ws.rs.core.SecurityContext;
+import javax.ws.rs.core.UriInfo;
+import javax.ws.rs.ext.Providers;
+
+import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
+
 import org.apache.isis.applib.annotation.Where;
-import org.apache.isis.applib.profiles.Localization;
 import org.apache.isis.core.commons.authentication.AuthenticationSession;
 import org.apache.isis.core.commons.config.IsisConfiguration;
 import org.apache.isis.core.metamodel.adapter.ObjectAdapter;
 import org.apache.isis.core.metamodel.adapter.mgr.AdapterManager;
 import org.apache.isis.core.metamodel.adapter.oid.Oid;
-import org.apache.isis.core.metamodel.spec.SpecificationLoader;
+import org.apache.isis.core.metamodel.consent.InteractionInitiatedBy;
+import org.apache.isis.core.metamodel.deployment.DeploymentCategory;
+import org.apache.isis.core.metamodel.services.ServicesInjector;
+import org.apache.isis.core.metamodel.specloader.SpecificationLoader;
 import org.apache.isis.core.runtime.system.persistence.PersistenceSession;
+import org.apache.isis.core.runtime.system.session.IsisSessionFactory;
+import org.apache.isis.core.webapp.WebAppConstants;
 import org.apache.isis.viewer.restfulobjects.applib.JsonRepresentation;
 import org.apache.isis.viewer.restfulobjects.applib.RepresentationType;
 import org.apache.isis.viewer.restfulobjects.applib.client.RestfulRequest.DomainModel;
 import org.apache.isis.viewer.restfulobjects.applib.client.RestfulRequest.RequestParameter;
 import org.apache.isis.viewer.restfulobjects.applib.client.RestfulResponse.HttpStatusCode;
-import org.apache.isis.viewer.restfulobjects.rendering.RendererContext;
+import org.apache.isis.viewer.restfulobjects.rendering.RendererContext6;
 import org.apache.isis.viewer.restfulobjects.rendering.RestfulObjectsApplicationException;
+import org.apache.isis.viewer.restfulobjects.rendering.service.RepresentationService;
 import org.apache.isis.viewer.restfulobjects.rendering.util.Util;
 
-public class ResourceContext implements RendererContext {
+public class ResourceContext implements RendererContext6 {
 
     private final HttpHeaders httpHeaders;
     private final UriInfo uriInfo;
     private final Request request;
+    private final Providers providers;
     private final HttpServletRequest httpServletRequest;
     private final HttpServletResponse httpServletResponse;
     private final SecurityContext securityContext;
-    private final Localization localization;
 
+    private final DeploymentCategory deploymentCategory;
     private final IsisConfiguration configuration;
+    private final ServicesInjector servicesInjector;
+    private final SpecificationLoader specificationLoader;
     private final AuthenticationSession authenticationSession;
     private final PersistenceSession persistenceSession;
-    private final AdapterManager adapterManager;
-    private final SpecificationLoader specificationLookup;
 
     private List<List<String>> followLinks;
 
     private final Where where;
+    private final RepresentationService.Intent intent;
+    private final InteractionInitiatedBy interactionInitiatedBy;
     private final String urlUnencodedQueryString;
+
     private JsonRepresentation readQueryStringAsMap;
 
     //region > constructor and init
 
     public ResourceContext(
-            final RepresentationType representationType, 
-            final HttpHeaders httpHeaders, 
-            final UriInfo uriInfo, 
-            final Request request, 
-            final Where where, 
+            final RepresentationType representationType,
+            final HttpHeaders httpHeaders,
+            final Providers providers,
+            final UriInfo uriInfo,
+            final Request request,
+            final Where where,
+            final RepresentationService.Intent intent,
             final String urlUnencodedQueryStringIfAny,
-            final HttpServletRequest httpServletRequest, 
+            final HttpServletRequest httpServletRequest,
             final HttpServletResponse httpServletResponse,
-            final SecurityContext securityContext, 
-            final Localization localization,
-            final AuthenticationSession authenticationSession,
-            final PersistenceSession persistenceSession, 
-            final AdapterManager objectAdapterLookup, 
-            final SpecificationLoader specificationLookup, 
-            final IsisConfiguration configuration) {
+            final SecurityContext securityContext,
+            final InteractionInitiatedBy interactionInitiatedBy) {
 
         this.httpHeaders = httpHeaders;
+        this.providers = providers;
         this.uriInfo = uriInfo;
         this.request = request;
+        this.where = where;
+        this.intent = intent;
         this.urlUnencodedQueryString = urlUnencodedQueryStringIfAny;
         this.httpServletRequest = httpServletRequest;
         this.httpServletResponse = httpServletResponse;
+
         this.securityContext = securityContext;
-        this.localization = localization;
-        this.configuration = configuration;
-        this.authenticationSession = authenticationSession;
-        this.persistenceSession = persistenceSession;
-        this.adapterManager = objectAdapterLookup;
-        this.specificationLookup = specificationLookup;
-        this.where = where;
+
+        final ServletContext servletContext = httpServletRequest.getServletContext();
+        final IsisSessionFactory isisSessionFactory = (IsisSessionFactory)servletContext.getAttribute(WebAppConstants.ISIS_SESSION_FACTORY);
+
+        this.servicesInjector = isisSessionFactory.getServicesInjector();
+        this.configuration = isisSessionFactory.getConfiguration();
+
+        this.authenticationSession = isisSessionFactory.getCurrentSession().getAuthenticationSession();
+        this.specificationLoader = isisSessionFactory.getSpecificationLoader();
+        this.deploymentCategory = isisSessionFactory.getDeploymentCategory();
+        this.persistenceSession = isisSessionFactory.getCurrentSession().getPersistenceSession();
+
+        this.interactionInitiatedBy = interactionInitiatedBy;
 
         init(representationType);
     }
@@ -106,8 +132,9 @@ public class ResourceContext implements RendererContext {
     
     void init(final RepresentationType representationType) {
         getQueryStringAsJsonRepr(); // force it to be cached
-        
-        ensureCompatibleAcceptHeader(representationType);
+
+        // previously we checked for compatible accept headers here.
+        // now, though, this is a responsibility of the various ContentNegotiationService implementations
         ensureDomainModelQueryParamSupported();
         
         this.followLinks = Collections.unmodifiableList(getArg(RequestParameter.FOLLOW_LINKS));
@@ -118,27 +145,6 @@ public class ResourceContext implements RendererContext {
         if(domainModel != DomainModel.FORMAL) {
             throw RestfulObjectsApplicationException.createWithMessage(HttpStatusCode.BAD_REQUEST,
                     "x-ro-domain-model of '%s' is not supported", domainModel);
-        }
-    }
-
-    private void ensureCompatibleAcceptHeader(final RepresentationType representationType) {
-        if (representationType == null) {
-            return;
-        }
-
-        // RestEasy will check the basic media types...
-        // ... so we just need to check the profile paramter
-        final String producedProfile = representationType.getMediaTypeProfile();
-        if(producedProfile != null) {
-            for (MediaType mediaType : httpHeaders.getAcceptableMediaTypes()) {
-                String acceptedProfileValue = mediaType.getParameters().get("profile");
-                if(acceptedProfileValue == null) {
-                    continue;
-                }
-                if(!producedProfile.equals(acceptedProfileValue)) {
-                    throw RestfulObjectsApplicationException.create(HttpStatusCode.NOT_ACCEPTABLE);
-                }
-            }
         }
     }
 
@@ -175,11 +181,14 @@ public class ResourceContext implements RendererContext {
             final JsonRepresentation map = JsonRepresentation.newMap();
             for(String paramName: params.keySet()) {
                 String paramValue = params.get(paramName)[0];
+                // this is rather hacky :-(
+                final String key = paramName.startsWith("x-ro") ? paramName : paramName + ".value";
                 try {
+                    // and this is even more hacky :-(
                     int paramValueAsInt = Integer.parseInt(paramValue);
-                    map.mapPut(paramName+".value", paramValueAsInt);
+                    map.mapPut(key, paramValueAsInt);
                 } catch(Exception ex) {
-                    map.mapPut(paramName+".value", paramValue);
+                    map.mapPut(key, stripQuotes(paramValue));
                 }
             }
             return map;
@@ -187,6 +196,16 @@ public class ResourceContext implements RendererContext {
             final String queryString = getUrlUnencodedQueryString();
             return Util.readQueryStringAsMap(queryString);
         }
+    }
+
+    static String stripQuotes(final String str) {
+        if(Strings.isNullOrEmpty(str)) {
+            return str;
+        }
+        if(str.startsWith("\"") && str.endsWith("\"")) {
+            return str.substring(1, str.lastIndexOf("\""));
+        }
+        return str;
     }
 
     private static boolean simpleQueryArgs(Map<String, String[]> params) {
@@ -219,6 +238,11 @@ public class ResourceContext implements RendererContext {
         return httpServletRequest;
     }
 
+    @Override
+    public List<MediaType> getAcceptableMediaTypes() {
+        return httpHeaders.getAcceptableMediaTypes();
+    }
+
     public HttpServletResponse getServletResponse() {
         return httpServletResponse;
     }
@@ -227,22 +251,41 @@ public class ResourceContext implements RendererContext {
         return securityContext;
     }
 
+    @Override
+    public DeploymentCategory getDeploymentCategory() {
+        return deploymentCategory;
+    }
+
+    @Override
+    public InteractionInitiatedBy getInteractionInitiatedBy() {
+        return interactionInitiatedBy;
+    }
+
+    @Override
     public List<List<String>> getFollowLinks() {
         return followLinks;
     }
 
-    public Localization getLocalization() {
-        return localization;
-    }
-
+    @Override
     public AuthenticationSession getAuthenticationSession() {
         return authenticationSession;
     }
 
+    /**
+     * @deprecated - use {@link #getPersistenceSession()}.
+     */
+    @Deprecated
+    @Override
     public AdapterManager getAdapterManager() {
-        return adapterManager;
+        return persistenceSession;
     }
 
+    @Override
+    public ServicesInjector getServicesInjector() {
+        return servicesInjector;
+    }
+
+    @Override
     public PersistenceSession getPersistenceSession() {
         return persistenceSession;
     }
@@ -251,8 +294,9 @@ public class ResourceContext implements RendererContext {
         return persistenceSession.getServices();
     }
 
-    public SpecificationLoader getSpecificationLookup() {
-        return specificationLookup;
+    @Override
+    public SpecificationLoader getSpecificationLoader() {
+        return specificationLoader;
     }
 
     @Override
@@ -260,11 +304,19 @@ public class ResourceContext implements RendererContext {
         return configuration;
     }
 
-
+    @Override
     public Where getWhere() {
         return where;
     }
 
+    /**
+     * Only applies to rendering of objects
+     * @return
+     */
+    @Override
+    public RepresentationService.Intent getIntent() {
+        return intent;
+    }
 
     //region > canEagerlyRender
     private Set<Oid> rendered = Sets.newHashSet();
@@ -334,6 +386,5 @@ public class ResourceContext implements RendererContext {
     public String urlFor(final String url) {
         return getUriInfo().getBaseUri().toString() + url;
     }
-
 
 }

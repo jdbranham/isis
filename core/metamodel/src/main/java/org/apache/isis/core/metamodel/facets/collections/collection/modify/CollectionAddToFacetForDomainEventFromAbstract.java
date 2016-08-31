@@ -23,13 +23,14 @@ import java.util.Set;
 import org.apache.isis.applib.services.eventbus.AbstractDomainEvent;
 import org.apache.isis.applib.services.eventbus.CollectionDomainEvent;
 import org.apache.isis.core.metamodel.adapter.ObjectAdapter;
+import org.apache.isis.core.metamodel.consent.InteractionInitiatedBy;
 import org.apache.isis.core.metamodel.facetapi.Facet;
 import org.apache.isis.core.metamodel.facetapi.FacetHolder;
 import org.apache.isis.core.metamodel.facets.DomainEventHelper;
 import org.apache.isis.core.metamodel.facets.SingleValueFacetAbstract;
 import org.apache.isis.core.metamodel.facets.collections.modify.CollectionAddToFacet;
 import org.apache.isis.core.metamodel.facets.propcoll.accessor.PropertyOrCollectionAccessorFacet;
-import org.apache.isis.core.metamodel.runtimecontext.ServicesInjector;
+import org.apache.isis.core.metamodel.services.ServicesInjector;
 
 
 public abstract class CollectionAddToFacetForDomainEventFromAbstract
@@ -63,53 +64,51 @@ public abstract class CollectionAddToFacetForDomainEventFromAbstract
     @Override
     public void add(
             final ObjectAdapter targetAdapter,
-            final ObjectAdapter referencedObjectAdapter) {
+            final ObjectAdapter referencedObjectAdapter, final InteractionInitiatedBy interactionInitiatedBy) {
         if (this.collectionAddToFacet == null) {
             return;
         }
-        if(!domainEventHelper.hasEventBusService()) {
-            collectionAddToFacet.add(targetAdapter, referencedObjectAdapter);
-            return;
-        }
 
-        try {
-            final Object referencedObject = ObjectAdapter.Util.unwrap(referencedObjectAdapter);
+        final Object referencedObject = ObjectAdapter.Util.unwrap(referencedObjectAdapter);
 
-            // get hold of underlying collection
-            final Object collection = getterFacet.getProperty(targetAdapter);
+        // get hold of underlying collection
+        final Object collection = getterFacet.getProperty(targetAdapter, interactionInitiatedBy);
 
-            // don't post event if has set semantics and already contains object
-            if(collection instanceof Set) {
-                Set<?> set = (Set<?>) collection;
-                if(set.contains(referencedObject)) {
-                    return;
-                }
+        // don't post event if has set semantics and already contains object
+        if(collection instanceof Set) {
+            Set<?> set = (Set<?>) collection;
+            if(set.contains(referencedObject)) {
+                return;
             }
-
-
-            // either doesn't contain object, or doesn't have set semantics, so
-            // execute the add wrapped between the executing and executed events ...
-
-            // pick up existing event (saved in thread local during the validation phase)
-            final CollectionDomainEvent<?, ?> existingEvent = collectionDomainEventFacet.currentInteraction.get();
-
-            // ... post the executing event
-            final CollectionDomainEvent<?, ?> event = domainEventHelper.postEventForCollection(
-                    value(), existingEvent, AbstractDomainEvent.Phase.EXECUTING,
-                    getIdentified(), targetAdapter, CollectionDomainEvent.Of.ADD_TO, referencedObject);
-
-            // ... perform add
-            collectionAddToFacet.add(targetAdapter, referencedObjectAdapter);
-
-            // ... post the executed event
-            domainEventHelper.postEventForCollection(
-                    value(), verify(event), AbstractDomainEvent.Phase.EXECUTED,
-                    getIdentified(), targetAdapter, CollectionDomainEvent.Of.ADD_TO, referencedObject);
-
-        } finally {
-            // clean up
-            collectionDomainEventFacet.currentInteraction.set(null);
         }
+
+
+        // either doesn't contain object, or doesn't have set semantics, so
+        // execute the add wrapped between the executing and executed events ...
+
+        // ... post the executing event
+        final CollectionDomainEvent<?, ?> event =
+                domainEventHelper.postEventForCollection(
+                        AbstractDomainEvent.Phase.EXECUTING,
+                        eventType(), null,
+                        getIdentified(), targetAdapter,
+                        CollectionDomainEvent.Of.ADD_TO,
+                        referencedObject);
+
+        // ... perform add
+        collectionAddToFacet.add(targetAdapter, referencedObjectAdapter, interactionInitiatedBy);
+
+        // ... post the executed event
+        domainEventHelper.postEventForCollection(
+                AbstractDomainEvent.Phase.EXECUTED,
+                value(), verify(event),
+                getIdentified(), targetAdapter,
+                CollectionDomainEvent.Of.ADD_TO,
+                referencedObject);
+    }
+
+    private Class<? extends CollectionDomainEvent<?, ?>> eventType() {
+        return value();
     }
 
     /**

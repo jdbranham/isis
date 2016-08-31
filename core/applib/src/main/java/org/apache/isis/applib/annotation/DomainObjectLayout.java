@@ -25,6 +25,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.apache.isis.applib.services.eventbus.CssClassUiEvent;
+import org.apache.isis.applib.services.eventbus.IconUiEvent;
+import org.apache.isis.applib.services.eventbus.TitleUiEvent;
+
 /**
  * Layout hints for domain objects.
  */
@@ -33,12 +37,65 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface DomainObjectLayout {
 
+
+    /**
+     * Which subclass of {@link TitleUiEvent} should be used to obtain a title.
+     *
+     * <p>
+     * This subclass must provide a no-arg constructor; the fields are set reflectively.
+     * </p>
+     */
+    Class<? extends TitleUiEvent<?>> titleUiEvent() default TitleUiEvent.Default.class;
+
+    // //////////////////////////////////////
+
+    /**
+     * Which subclass of {@link IconUiEvent} should be used to obtain an icon.
+     *
+     * <p>
+     * This subclass must provide a no-arg constructor; the fields are set reflectively.
+     * </p>
+     */
+    Class<? extends IconUiEvent<?>> iconUiEvent() default IconUiEvent.Default.class;
+
+    // //////////////////////////////////////
+
+    /**
+     * Which subclass of {@link CssClassUiEvent} should be used to obtain a CSS class.
+     *
+     * <p>
+     * This subclass must provide a no-arg constructor; the fields are set reflectively.
+     * </p>
+     */
+    Class<? extends CssClassUiEvent<?>> cssClassUiEvent() default CssClassUiEvent.Default.class;
+
     /**
      * Indicates the css class that a domain class (type) should have.
      */
     String cssClass() default "";
 
+    // //////////////////////////////////////
 
+    /**
+     * Indicates the <a href="http://fortawesome.github.io/Font-Awesome/">Font Awesome</a> CSS class to decorate an
+     * domain object.
+     */
+    String cssClassFa() default "";
+
+    /**
+     * Indicates the position of the <a href="http://fortawesome.github.io/Font-Awesome/">Font Awesome</a>
+     * icon. The icon could be rendered on the left or the right of the object's title.
+     *
+     * <p>
+     *     This attribute is currently ignored by Isis viewers.
+     * </p>
+s     */
+    CssClassFaPosition cssClassFaPosition() default CssClassFaPosition.LEFT;
+
+    enum CssClassFaPosition {
+        LEFT, RIGHT
+    }
+    
     // //////////////////////////////////////
 
     /**
@@ -69,7 +126,7 @@ public @interface DomainObjectLayout {
      * If annotated on a type, then the page size refers to standalone
      * collections (eg as returned from a repository query).
      */
-    public int paged() default -1;
+    int paged() default -1;
 
 
     // //////////////////////////////////////

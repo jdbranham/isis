@@ -19,15 +19,18 @@
 
 package domainapp.fixture.scenarios;
 
-import domainapp.dom.modules.simple.SimpleObject;
-import domainapp.fixture.modules.simple.SimpleObjectsTearDown;
-import domainapp.fixture.modules.simple.SimpleObjectCreate;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+
 import com.google.common.collect.Lists;
+
+import org.apache.isis.applib.annotation.Programmatic;
 import org.apache.isis.applib.fixturescripts.FixtureScript;
+
+import domainapp.dom.simple.SimpleObject;
+import domainapp.fixture.dom.simple.SimpleObjectCreate;
+import domainapp.fixture.dom.simple.SimpleObjectsTearDown;
 
 public class RecreateSimpleObjects extends FixtureScript {
 
@@ -60,6 +63,7 @@ public class RecreateSimpleObjects extends FixtureScript {
     /**
      * The simpleobjects created by this fixture (output).
      */
+    @Programmatic
     public List<SimpleObject> getSimpleObjects() {
         return simpleObjects;
     }

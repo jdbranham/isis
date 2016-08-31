@@ -16,19 +16,19 @@ O *  Licensed to the Apache Software Foundation (ASF) under one or more
  */
 package domainapp.integtests.specglue;
 
-import cucumber.api.java.After;
-import cucumber.api.java.Before;
-import domainapp.integtests.bootstrap.SimpleAppSystemInitializer;
-
 import org.apache.isis.core.specsupport.scenarios.ScenarioExecutionScope;
 import org.apache.isis.core.specsupport.specs.CukeGlueAbstract;
+
+import cucumber.api.java.After;
+import cucumber.api.java.Before;
+import domainapp.integtests.bootstrap.DomainAppSystemInitializer;
 
 public class BootstrappingGlue extends CukeGlueAbstract {
 
     @Before(value={"@integration"}, order=100)
     public void beforeScenarioIntegrationScope() {
         org.apache.log4j.PropertyConfigurator.configure("logging.properties");
-        SimpleAppSystemInitializer.initIsft();
+        DomainAppSystemInitializer.initIsft();
         
         before(ScenarioExecutionScope.INTEGRATION);
     }

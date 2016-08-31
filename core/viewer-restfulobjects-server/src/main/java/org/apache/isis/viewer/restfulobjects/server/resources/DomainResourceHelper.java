@@ -17,37 +17,54 @@
 package org.apache.isis.viewer.restfulobjects.server.resources;
 
 import java.util.List;
+
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+
 import org.apache.isis.applib.annotation.ActionSemantics;
 import org.apache.isis.applib.annotation.Where;
-import org.apache.isis.applib.profiles.Localization;
+import org.apache.isis.applib.services.xactn.TransactionService;
 import org.apache.isis.core.commons.authentication.AuthenticationSession;
 import org.apache.isis.core.commons.config.IsisConfiguration;
 import org.apache.isis.core.metamodel.adapter.ObjectAdapter;
 import org.apache.isis.core.metamodel.adapter.mgr.AdapterManager;
+import org.apache.isis.core.metamodel.consent.InteractionInitiatedBy;
+import org.apache.isis.core.metamodel.deployment.DeploymentCategory;
+import org.apache.isis.core.metamodel.services.ServicesInjector;
 import org.apache.isis.core.metamodel.spec.feature.ObjectAction;
 import org.apache.isis.core.metamodel.spec.feature.OneToManyAssociation;
 import org.apache.isis.core.metamodel.spec.feature.OneToOneAssociation;
-import org.apache.isis.core.runtime.system.context.IsisContext;
+import org.apache.isis.core.metamodel.specloader.SpecificationLoader;
 import org.apache.isis.core.runtime.system.persistence.PersistenceSession;
 import org.apache.isis.viewer.restfulobjects.applib.JsonRepresentation;
 import org.apache.isis.viewer.restfulobjects.applib.client.RestfulResponse;
-import org.apache.isis.viewer.restfulobjects.rendering.RendererContext;
+import org.apache.isis.viewer.restfulobjects.rendering.RendererContext6;
 import org.apache.isis.viewer.restfulobjects.rendering.RestfulObjectsApplicationException;
-import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.*;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.ActionResultReprRenderer;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.DomainObjectLinkTo;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.MemberReprMode;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.ObjectAdapterLinkTo;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.ObjectAndAction;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.ObjectAndActionInvocation;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.ObjectAndCollection2;
+import org.apache.isis.viewer.restfulobjects.rendering.domainobjects.ObjectAndProperty2;
 import org.apache.isis.viewer.restfulobjects.rendering.service.RepresentationService;
 import org.apache.isis.viewer.restfulobjects.server.ResourceContext;
 
 public class DomainResourceHelper {
 
-    static class RepresentationServiceContextAdapter implements RepresentationService.Context {
+    static class RepresentationServiceContextAdapter implements RepresentationService.Context6 {
 
-        private final RendererContext rendererContext;
+        private final RendererContext6 rendererContext;
         private final ObjectAdapterLinkTo adapterLinkTo;
+        private RepresentationService.Intent intent;
 
-        RepresentationServiceContextAdapter(final RendererContext rendererContext, final ObjectAdapterLinkTo adapterLinkTo) {
+        RepresentationServiceContextAdapter(
+                final RendererContext6 rendererContext,
+                final ObjectAdapterLinkTo adapterLinkTo) {
             this.rendererContext = rendererContext;
             this.adapterLinkTo = adapterLinkTo;
+            this.intent = rendererContext.getIntent();
         }
 
         @Override
@@ -77,7 +94,7 @@ public class DomainResourceHelper {
 
         @Override
         public AdapterManager getAdapterManager() {
-            return rendererContext.getAdapterManager();
+            return rendererContext.getPersistenceSession();
         }
 
         @Override
@@ -86,13 +103,18 @@ public class DomainResourceHelper {
         }
 
         @Override
+        public DeploymentCategory getDeploymentCategory() {
+            return rendererContext.getDeploymentCategory();
+        }
+
+        @Override
         public List<List<String>> getFollowLinks() {
             return rendererContext.getFollowLinks();
         }
 
         @Override
-        public Localization getLocalization() {
-            return rendererContext.getLocalization();
+        public List<MediaType> getAcceptableMediaTypes() {
+            return rendererContext.getAcceptableMediaTypes();
         }
 
         @Override
@@ -139,28 +161,51 @@ public class DomainResourceHelper {
         public boolean suppressMemberDisabledReason() {
             return rendererContext.suppressMemberDisabledReason();
         }
+
+        @Override
+        public InteractionInitiatedBy getInteractionInitiatedBy() {
+            return rendererContext.getInteractionInitiatedBy();
+        }
+
+        @Override
+        public SpecificationLoader getSpecificationLoader() {
+            return rendererContext.getSpecificationLoader();
+        }
+
+        @Override
+        public ServicesInjector getServicesInjector() {
+            return rendererContext.getServicesInjector();
+        }
+
+        @Override
+        public RepresentationService.Intent getIntent() {
+            return intent;
+        }
     }
 
+    private final RepresentationServiceContextAdapter representationServiceContext;
     private final RepresentationService representationService;
-    private RepresentationServiceContextAdapter representationServiceContext;
+    private final TransactionService transactionService;
 
     public DomainResourceHelper(final ResourceContext resourceContext, final ObjectAdapter objectAdapter) {
+        this(resourceContext, objectAdapter, new DomainObjectLinkTo());
+    }
+
+    public DomainResourceHelper(
+            final ResourceContext resourceContext,
+            final ObjectAdapter objectAdapter,
+            final ObjectAdapterLinkTo adapterLinkTo) {
+
         this.resourceContext = resourceContext;
         this.objectAdapter = objectAdapter;
 
-        using(new DomainObjectLinkTo());
-
-        representationService = lookupService(RepresentationService.class);
-    }
-
-    public DomainResourceHelper using(final ObjectAdapterLinkTo adapterLinkTo) {
-
         representationServiceContext = new RepresentationServiceContextAdapter(resourceContext, adapterLinkTo);
 
-        adapterLinkTo.usingUrlBase(resourceContext)
-                     .with(objectAdapter);
+        adapterLinkTo.usingUrlBase(this.resourceContext)
+                     .with(this.objectAdapter);
 
-        return this;
+        representationService = lookupService(RepresentationService.class);
+        transactionService = lookupService(TransactionService.class);
     }
 
     private final ResourceContext resourceContext;
@@ -176,7 +221,22 @@ public class DomainResourceHelper {
      * render a representation of the object.
      */
     public Response objectRepresentation() {
-        return representationService.objectRepresentation(representationServiceContext, objectAdapter);
+        transactionService.flushTransaction();
+        return representationService
+                .objectRepresentation(representationServiceContext, objectAdapter);
+    }
+
+    /**
+     * Simply delegates to the {@link org.apache.isis.viewer.restfulobjects.rendering.service.RepresentationService} to
+     * render a representation of the object.
+     *
+     * @deprecated - use {@link #objectRepresentation()}
+     */
+    @Deprecated
+    public Response objectRepresentation(final RepresentationService.Intent intent) {
+        transactionService.flushTransaction();
+        return representationService
+                .objectRepresentation(representationServiceContext, objectAdapter, intent);
     }
 
     /**
@@ -192,7 +252,8 @@ public class DomainResourceHelper {
 
         final OneToOneAssociation property = accessHelper.getPropertyThatIsVisibleForIntent(propertyId, ObjectAdapterAccessHelper.Intent.ACCESS);
 
-        return representationService.propertyDetails(representationServiceContext, new ObjectAndProperty(objectAdapter, property), memberMode);
+        transactionService.flushTransaction();
+        return representationService.propertyDetails(representationServiceContext, new ObjectAndProperty2(objectAdapter, property, memberMode), memberMode);
     }
 
 
@@ -209,7 +270,8 @@ public class DomainResourceHelper {
 
         final OneToManyAssociation collection = accessHelper.getCollectionThatIsVisibleForIntent(collectionId, ObjectAdapterAccessHelper.Intent.ACCESS);
 
-        return representationService.collectionDetails(representationServiceContext, new ObjectAndCollection(objectAdapter, collection), memberMode);
+        transactionService.flushTransaction();
+        return representationService.collectionDetails(representationServiceContext, new ObjectAndCollection2(objectAdapter, collection, memberMode), memberMode);
     }
 
 
@@ -224,6 +286,7 @@ public class DomainResourceHelper {
 
         final ObjectAction action = accessHelper.getObjectActionThatIsVisibleForIntent(actionId, ObjectAdapterAccessHelper.Intent.ACCESS);
 
+        transactionService.flushTransaction();
         return representationService.actionPrompt(representationServiceContext, new ObjectAndAction(objectAdapter, action));
     }
 
@@ -233,7 +296,7 @@ public class DomainResourceHelper {
      * of the result of that action.
      *
      * <p>
-     *     The action must have {@link org.apache.isis.applib.annotation.ActionSemantics.Of#SAFE safe} semantics
+     *     The action must have {@link ActionSemantics.Of#isSafeInNature()} safe/request-cacheable}  semantics
      *     otherwise an error response is thrown.
      * </p>
      */
@@ -244,8 +307,8 @@ public class DomainResourceHelper {
         final ObjectAction action = accessHelper.getObjectActionThatIsVisibleForIntent(actionId, ObjectAdapterAccessHelper.Intent.MUTATE);
 
         final ActionSemantics.Of actionSemantics = action.getSemantics();
-        if (actionSemantics != ActionSemantics.Of.SAFE) {
-            throw RestfulObjectsApplicationException.createWithMessage(RestfulResponse.HttpStatusCode.METHOD_NOT_ALLOWED, "Method not allowed; action '%s' is not query only", action.getId());
+        if (! actionSemantics.isSafeInNature()) {
+            throw RestfulObjectsApplicationException.createWithMessage(RestfulResponse.HttpStatusCode.METHOD_NOT_ALLOWED, "Method not allowed; action '%s' does not have safe semantics", action.getId());
         }
 
         return invokeActionUsingAdapters(action, arguments, ActionResultReprRenderer.SelfLink.INCLUDED);
@@ -302,13 +365,17 @@ public class DomainResourceHelper {
         final List<ObjectAdapter> argAdapters = argHelper.parseAndValidateArguments(arguments);
 
         // invoke
-        final ObjectAdapter[] argArray2 = argAdapters.toArray(new ObjectAdapter[0]);
-        final ObjectAdapter returnedAdapter = action.execute(objectAdapter, argArray2);
+        final ObjectAdapter mixedInAdapter = null; // action will automatically fill in if a mixin
+        final ObjectAdapter[] argAdapterArr = argAdapters.toArray(new ObjectAdapter[argAdapters.size()]);
+        final ObjectAdapter returnedAdapter = action.execute(
+                objectAdapter,  mixedInAdapter, argAdapterArr,
+                InteractionInitiatedBy.USER);
 
         final ObjectAndActionInvocation objectAndActionInvocation =
-                new ObjectAndActionInvocation(this.objectAdapter, action, arguments, returnedAdapter);
+                new ObjectAndActionInvocation(objectAdapter, action, arguments, returnedAdapter, selfLink);
 
         // response
+        transactionService.flushTransaction();
         return representationService.actionResult(representationServiceContext, objectAndActionInvocation, selfLink);
     }
 
@@ -317,15 +384,12 @@ public class DomainResourceHelper {
     // dependencies (from context)
     // //////////////////////////////////////
 
-    private PersistenceSession getPersistenceSession() {
-        return IsisContext.getPersistenceSession();
+    private ServicesInjector getServicesInjector() {
+        return resourceContext.getServicesInjector();
     }
 
-    /**
-     * Service locator
-     */
     private <T> T lookupService(Class<T> serviceType) {
-        return getPersistenceSession().getServiceOrNull(serviceType);
+        return getServicesInjector().lookupService(serviceType);
     }
 
 }

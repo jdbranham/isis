@@ -22,6 +22,7 @@ package org.apache.isis.core.metamodel.facets.members.order.annotprop;
 import java.util.Properties;
 
 import org.apache.isis.applib.annotation.MemberOrder;
+import org.apache.isis.applib.services.i18n.TranslationService;
 import org.apache.isis.core.metamodel.facetapi.FacetHolder;
 import org.apache.isis.core.metamodel.facetapi.FacetUtil;
 import org.apache.isis.core.metamodel.facetapi.FeatureType;
@@ -56,7 +57,7 @@ public class MemberOrderFacetFactory extends FacetFactoryAbstract implements Con
         FacetUtil.addFacet(memberOrderFacet);
     }
 
-    private static MemberOrderFacet createFromMetadataPropertiesIfPossible(
+    private MemberOrderFacet createFromMetadataPropertiesIfPossible(
             final ProcessContextWithMetadataProperties<? extends FacetHolder> pcwmp) {
         
         final FacetHolder holder = pcwmp.getFacetHolder();
@@ -64,17 +65,28 @@ public class MemberOrderFacetFactory extends FacetFactoryAbstract implements Con
         final MemberOrderFacet memberOrderFacet;
         final Properties properties = pcwmp.metadataProperties("memberOrder");
         if(properties != null) {
-            memberOrderFacet = new MemberOrderFacetProperties(properties, holder);
+            memberOrderFacet = new MemberOrderFacetProperties(
+                    properties,
+                    servicesInjector.lookupService(TranslationService.class),
+                    holder);
         } else {
             memberOrderFacet = null;
         }
         return memberOrderFacet;
     }
 
-    private static MemberOrderFacet createFromAnnotationIfPossible(final ProcessMethodContext processMethodContext) {
+    private MemberOrderFacet createFromAnnotationIfPossible(final ProcessMethodContext processMethodContext) {
         final MemberOrder annotation = Annotations.getAnnotation(processMethodContext.getMethod(), MemberOrder.class);
-        return annotation != null ? new MemberOrderFacetAnnotation(annotation.name(), annotation.sequence(), processMethodContext.getFacetHolder()) : null;
+        if (annotation != null) {
+            return new MemberOrderFacetAnnotation(
+                    annotation.name(),
+                    annotation.sequence(),
+                    servicesInjector.lookupService(TranslationService.class),
+                    processMethodContext.getFacetHolder());
+        }
+        else {
+            return null;
+        }
     }
-
 
 }

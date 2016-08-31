@@ -18,48 +18,36 @@
  */
 package org.apache.isis.core.runtime.services.i18n.po;
 
-import java.util.List;
 import javax.inject.Inject;
-import org.apache.isis.applib.Identifier;
+
 import org.apache.isis.applib.IsisApplibModule;
 import org.apache.isis.applib.annotation.Action;
 import org.apache.isis.applib.annotation.ActionLayout;
 import org.apache.isis.applib.annotation.DomainService;
 import org.apache.isis.applib.annotation.DomainServiceLayout;
 import org.apache.isis.applib.annotation.MemberOrder;
+import org.apache.isis.applib.annotation.NatureOfService;
 import org.apache.isis.applib.annotation.ParameterLayout;
 import org.apache.isis.applib.annotation.RestrictTo;
 import org.apache.isis.applib.annotation.SemanticsOf;
 import org.apache.isis.applib.value.Clob;
 
-@DomainService()
+@DomainService(
+        nature = NatureOfService.VIEW_MENU_ONLY
+)
 @DomainServiceLayout(
         named = "Prototyping",
         menuBar = DomainServiceLayout.MenuBar.SECONDARY,
-        menuOrder = "500.500"
+        menuOrder = "500.700"
 )
 public class TranslationServicePoMenu {
 
     public static abstract class ActionDomainEvent extends IsisApplibModule.ActionDomainEvent<TranslationServicePoMenu> {
-        public ActionDomainEvent(final TranslationServicePoMenu source, final Identifier identifier) {
-            super(source, identifier);
-        }
-
-        public ActionDomainEvent(final TranslationServicePoMenu source, final Identifier identifier, final Object... arguments) {
-            super(source, identifier, arguments);
-        }
-
-        public ActionDomainEvent(final TranslationServicePoMenu source, final Identifier identifier, final List<Object> arguments) {
-            super(source, identifier, arguments);
-        }
     }
 
     // //////////////////////////////////////
 
     public static class DownloadPotFileDomainEvent extends ActionDomainEvent {
-        public DownloadPotFileDomainEvent(final TranslationServicePoMenu source, final Identifier identifier, final Object... arguments) {
-            super(source, identifier, arguments);
-        }
     }
 
     @Action(
@@ -70,28 +58,21 @@ public class TranslationServicePoMenu {
     @ActionLayout(
             cssClassFa = "fa-download"
     )
-    @MemberOrder(sequence="500.500.1")
+    @MemberOrder(sequence="500.700.1")
     public Clob downloadTranslations(
             @ParameterLayout(named = ".pot file name")
             final String potFileName) {
         final String chars = translationService.toPot();
-        return new Clob(potFileName, "text/plain", chars);
+        return new Clob(Util.withSuffix(potFileName, "pot"), "text/plain", chars);
     }
 
     public String default0DownloadTranslations() {
         return "translations.pot";
     }
-    public boolean hideDownloadTranslations() {
-        return translationService.getMode().isRead();
-    }
 
     // //////////////////////////////////////
 
-    public static class ResetTranslationCacheDomainEvent extends ActionDomainEvent {
-        public ResetTranslationCacheDomainEvent(final TranslationServicePoMenu source, final Identifier identifier, final Object... arguments) {
-            super(source, identifier, arguments);
-        }
-    }
+    public static class ResetTranslationCacheDomainEvent extends ActionDomainEvent { }
 
     @Action(
             domainEvent = ResetTranslationCacheDomainEvent.class,
@@ -102,7 +83,7 @@ public class TranslationServicePoMenu {
             named="Clear translation cache",
             cssClassFa = "fa-trash"
     )
-    @MemberOrder(sequence="500.500.2")
+    @MemberOrder(sequence="500.700.2")
     public void resetTranslationCache() {
         translationService.clearCache();
     }
@@ -112,7 +93,48 @@ public class TranslationServicePoMenu {
 
     // //////////////////////////////////////
 
-    @Inject
+    public static class SwitchToReadingTranslationsDomainEvent extends ActionDomainEvent { }
+
+    @Action(
+            domainEvent = SwitchToReadingTranslationsDomainEvent.class,
+            semantics = SemanticsOf.IDEMPOTENT,
+            restrictTo = RestrictTo.PROTOTYPING
+    )
+    @ActionLayout(
+            cssClassFa = "fa-book"
+    )
+    @MemberOrder(sequence="500.700.2")
+    public void switchToReadingTranslations() {
+        translationService.toggleMode();
+    }
+    public boolean hideSwitchToReadingTranslations() {
+        return translationService.getMode().isRead();
+    }
+
+    // //////////////////////////////////////
+
+    public static class SwitchToWritingTranslationsDomainEvent extends ActionDomainEvent {
+    }
+
+    @Action(
+            domainEvent = SwitchToWritingTranslationsDomainEvent.class,
+            semantics = SemanticsOf.IDEMPOTENT,
+            restrictTo = RestrictTo.PROTOTYPING
+    )
+    @ActionLayout(
+            cssClassFa = "fa-pencil"
+    )
+    @MemberOrder(sequence="500.700.3")
+    public void switchToWritingTranslations() {
+        translationService.toggleMode();
+    }
+    public boolean hideSwitchToWritingTranslations() {
+        return translationService.getMode().isWrite();
+    }
+
+    // //////////////////////////////////////
+
+    @javax.inject.Inject
     private TranslationServicePo translationService;
 
 }

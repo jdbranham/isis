@@ -18,21 +18,38 @@
  */
 package org.apache.isis.applib.services.eventbus;
 
+import java.util.EventObject;
 import java.util.Map;
 import com.google.common.collect.Maps;
 import org.apache.isis.applib.Identifier;
 import org.apache.isis.applib.annotation.Programmatic;
+import org.apache.isis.applib.services.i18n.TranslatableString;
 import org.apache.isis.applib.util.ObjectContracts;
 
 public abstract class AbstractDomainEvent<S> extends java.util.EventObject {
 
     private static final long serialVersionUID = 1L;
 
+    /**
+     * If used then the framework will set state via (non-API) setters.
+     *
+     * <p>
+     *     Because the {@link EventObject} superclass prohibits a null source, a dummy value is temporarily used.
+     * </p>
+     */
+    public AbstractDomainEvent() {
+        this(null, null);
+    }
+
     public AbstractDomainEvent(
             final S source,
             final Identifier identifier) {
-        super(source);
+        super(sourceElseDummy(source));
         this.identifier = identifier;
+    }
+
+    private static Object sourceElseDummy(final Object source) {
+        return source != null ? source : new Object();
     }
 
     //region > Phase
@@ -57,7 +74,11 @@ public abstract class AbstractDomainEvent<S> extends java.util.EventObject {
          * via {@link org.apache.isis.applib.services.eventbus.ActionInteractionEvent#getCommand()}.
          */
         public boolean isExecutingOrLater() {
-            return this == EXECUTING || this == EXECUTED;
+            return isExecuting() || isExecuted();
+        }
+
+        public boolean isExecuting() {
+            return this == EXECUTING;
         }
 
         public boolean isExecuted() {
@@ -89,12 +110,29 @@ public abstract class AbstractDomainEvent<S> extends java.util.EventObject {
     public S getSource() {
         return (S)source;
     }
+
+    /**
+     * Not API, set by the framework if the no-arg constructor is used.
+     */
+    public void setSource(S source) {
+        this.source = source;
+    }
     //endregion
 
     //region > identifier
-    private final Identifier identifier;
+    /**
+     * If the no-arg constructor is used, then the framework will populate this field reflectively.
+     */
+    private Identifier identifier;
     public Identifier getIdentifier() {
         return identifier;
+    }
+
+    /**
+     * Not API, set by the framework if the no-arg constructor is used.
+     */
+    public void setIdentifier(final Identifier identifier) {
+        this.identifier = identifier;
     }
     //endregion
 
@@ -104,48 +142,103 @@ public abstract class AbstractDomainEvent<S> extends java.util.EventObject {
         return hidden;
     }
 
+    /**
+     * @see #veto(String, Object...)
+     */
     public void hide() {
         this.hidden = true;
     }
     //endregion
 
-    //region > disable, isDisabled, getDisabledReason
+    //region > disable, isDisabled, getDisabledReason, getDisabledReasonTranslatable
     private String disabledReason;
+
     public boolean isDisabled() {
-        return disabledReason != null;
+        return disabledReason != null || disabledReasonTranslatable != null;
     }
+
+    /**
+     * If {@link #isDisabled() disabled}, then either this method returns non-null or {@link #getDisabledReasonTranslatable()} will.
+     */
     public String getDisabledReason() {
         return disabledReason;
     }
+
+    /**
+     * @see #disable(org.apache.isis.applib.services.i18n.TranslatableString)
+     * @see #veto(String, Object...)
+     */
     public void disable(final String reason) {
         this.disabledReason = reason;
     }
+
+    private TranslatableString disabledReasonTranslatable;
+    /**
+     * If {@link #isDisabled() disabled}, then either this method returns non-null or {@link #getDisabledReason()} will.
+     */
+    public TranslatableString getDisabledReasonTranslatable() {
+        return disabledReasonTranslatable;
+    }
+    /**
+     * @see #disable(java.lang.String)
+     * @see #veto(org.apache.isis.applib.services.i18n.TranslatableString)
+     */
+    public void disable(final TranslatableString reason) {
+        this.disabledReasonTranslatable = reason;
+    }
     //endregion
 
-    //region > invalidate, isInvalid, getInvalidityReason
+    //region > invalidate, isInvalid, getInvalidityReason, getInvalidityReasonTranslatable
     private String invalidatedReason;
     public boolean isInvalid() {
-        return invalidatedReason != null;
+        return invalidatedReason != null || invalidatedReasonTranslatable != null;
     }
+
+    /**
+     * If {@link #isInvalid() invalid}, then either this method returns non-null or {@link #getInvalidityReasonTranslatable()} will.
+     */
     public String getInvalidityReason() {
         return invalidatedReason;
     }
+    /**
+     * @see #invalidate(org.apache.isis.applib.services.i18n.TranslatableString)
+     * @see #veto(String, Object...)
+     */
     public void invalidate(final String reason) {
         this.invalidatedReason = reason;
     }
+
+    private TranslatableString invalidatedReasonTranslatable;
+    /**
+     * If {@link #isInvalid() invalid}, then either this method returns non-null or {@link #getInvalidityReason()} will.
+     */
+    public TranslatableString getInvalidityReasonTranslatable() {
+        return invalidatedReasonTranslatable;
+    }
+
+    /**
+     * @see #invalidate(String)
+     * @see #veto(org.apache.isis.applib.services.i18n.TranslatableString)
+     */
+    public void invalidate(final TranslatableString reason) {
+        this.invalidatedReasonTranslatable = reason;
+    }
+
     //endregion
 
     //region > veto
     /**
      * Use instead of {@link #hide()}, {@link #disable(String)} and {@link #invalidate(String)}; just delegates to
-     * appropriate vetoing method based upon the {@link #getPhase()}.
+     * appropriate vetoing method based upon the {@link #getEventPhase() phase}.
      *
      * <p>
      *     If hiding, just pass <tt>null</tt> for the parameter.
      * </p>
      *
-     * @param reason - reason why the interaction is being invalidated (ignored if in {@link org.apache.isis.applib.services.eventbus.AbstractInteractionEvent.Phase#HIDE hide} phase).
+     * @param reason - reason why the interaction is being invalidated (ignored if in {@link org.apache.isis.applib.services.eventbus.AbstractDomainEvent.Phase#HIDE hide} phase).
      * @param args
+     *
+     * @see #veto(org.apache.isis.applib.services.i18n.TranslatableString)
      */
     @Programmatic
     public void veto(final String reason, final Object... args) {
@@ -156,6 +249,29 @@ public abstract class AbstractDomainEvent<S> extends java.util.EventObject {
                 disable(String.format(reason, args));
             case VALIDATE:
                 invalidate(String.format(reason, args));
+        }
+    }
+    /**
+     * Use instead of {@link #hide()}, {@link #disable(org.apache.isis.applib.services.i18n.TranslatableString)} and {@link #invalidate(org.apache.isis.applib.services.i18n.TranslatableString)}; just delegates to
+     * appropriate vetoing method based upon the {@link #getEventPhase() phase}.
+     *
+     * <p>
+     *     If hiding, just pass <tt>null</tt> for the parameter.
+     * </p>
+     *
+     * @param translatableReason - reason why the interaction is being invalidated (ignored if in {@link org.apache.isis.applib.services.eventbus.AbstractDomainEvent.Phase#HIDE hide} phase).
+     *
+     * @see #veto(String, Object...)
+     */
+    @Programmatic
+    public void veto(final TranslatableString translatableReason) {
+        switch (getEventPhase()) {
+            case HIDE:
+                hide();
+            case DISABLE:
+                disable(translatableReason);
+            case VALIDATE:
+                invalidate(translatableReason);
         }
     }
     //endregion
@@ -183,7 +299,7 @@ public abstract class AbstractDomainEvent<S> extends java.util.EventObject {
     //region > toString
     @Override
     public String toString() {
-        return ObjectContracts.toString(this, "source,identifier,mode");
+        return ObjectContracts.toString(this, "source","identifier","eventPhase");
     }
     //endregion
 }

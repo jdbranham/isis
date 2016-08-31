@@ -20,27 +20,36 @@
 package org.apache.isis.core.metamodel.facets.actions.action.invocation;
 
 import java.util.Map;
+
 import org.apache.isis.applib.events.InteractionEvent;
 import org.apache.isis.applib.events.UsabilityEvent;
 import org.apache.isis.applib.events.ValidityEvent;
 import org.apache.isis.applib.events.VisibilityEvent;
 import org.apache.isis.applib.services.eventbus.AbstractDomainEvent;
 import org.apache.isis.applib.services.eventbus.ActionDomainEvent;
+import org.apache.isis.applib.services.i18n.TranslatableString;
+import org.apache.isis.applib.services.i18n.TranslationService;
 import org.apache.isis.core.metamodel.adapter.ObjectAdapter;
 import org.apache.isis.core.metamodel.facetapi.Facet;
 import org.apache.isis.core.metamodel.facetapi.FacetHolder;
+import org.apache.isis.core.metamodel.facetapi.IdentifiedHolder;
 import org.apache.isis.core.metamodel.facets.DomainEventHelper;
 import org.apache.isis.core.metamodel.facets.SingleClassValueFacetAbstract;
-import org.apache.isis.core.metamodel.interactions.ActionInvocationContext;
+import org.apache.isis.core.metamodel.interactions.ActionInteractionContext;
+import org.apache.isis.core.metamodel.interactions.ActionValidityContext;
 import org.apache.isis.core.metamodel.interactions.InteractionContext;
 import org.apache.isis.core.metamodel.interactions.UsabilityContext;
 import org.apache.isis.core.metamodel.interactions.ValidityContext;
 import org.apache.isis.core.metamodel.interactions.VisibilityContext;
-import org.apache.isis.core.metamodel.runtimecontext.ServicesInjector;
-import org.apache.isis.core.metamodel.spec.SpecificationLoader;
+import org.apache.isis.core.metamodel.services.ServicesInjector;
+import org.apache.isis.core.metamodel.specloader.SpecificationLoader;
+import org.apache.isis.core.metamodel.spec.feature.ObjectAction;
 
 public abstract class ActionDomainEventFacetAbstract
         extends SingleClassValueFacetAbstract implements ActionDomainEventFacet {
+
+    private final TranslationService translationService;
+    private final String translationContext;
 
     static Class<? extends Facet> type() {
         return ActionDomainEventFacet.class;
@@ -48,40 +57,32 @@ public abstract class ActionDomainEventFacetAbstract
 
     private final DomainEventHelper domainEventHelper;
 
-    /**
-     * Pass event from validate to executing phases.
-     *
-     * <p>
-     * A new event is created for the hide, disable and validate phases.  But when the validate completes (and if does
-     * not invalidate), then the event is passed through to the executing phase using this thread-local.
-     * </p>
-     */
-    final static ThreadLocal<ActionDomainEvent<?>> currentInteraction = new ThreadLocal<>();
-
     public ActionDomainEventFacetAbstract(
             final Class<? extends ActionDomainEvent<?>> eventType,
             final FacetHolder holder,
             final ServicesInjector servicesInjector,
             final SpecificationLoader specificationLoader) {
         super(type(), holder, eventType, specificationLoader);
+
+        this.translationService = servicesInjector.lookupService(TranslationService.class);
+        // sadness: same as in TranslationFactory
+        this.translationContext = ((IdentifiedHolder)holder).getIdentifier().toClassAndNameIdentityString();
+
         domainEventHelper = new DomainEventHelper(servicesInjector);
     }
 
 
     @Override
     public String hides(final VisibilityContext<? extends VisibilityEvent> ic) {
-        if(!domainEventHelper.hasEventBusService()) {
-            return null;
-        }
 
-        // reset (belt-n-braces)
-        currentInteraction.set(null);
-
-        final ObjectAdapter[] argumentAdapters = argumentAdaptersFrom(ic);
         final ActionDomainEvent<?> event =
                 domainEventHelper.postEventForAction(
-                        eventType(), null, null, AbstractDomainEvent.Phase.HIDE,
-                        getIdentified(), ic.getTarget(), argumentAdapters, null);
+                        AbstractDomainEvent.Phase.HIDE,
+                        eventType(), null,
+                        actionFrom(ic), getIdentified(),
+                        ic.getTarget(), ic.getMixedIn(), argumentAdaptersFrom(ic),
+                        null,
+                        null);
         if (event != null && event.isHidden()) {
             return "Hidden by subscriber";
         }
@@ -90,22 +91,32 @@ public abstract class ActionDomainEventFacetAbstract
 
     @Override
     public String disables(UsabilityContext<? extends UsabilityEvent> ic) {
-        if(!domainEventHelper.hasEventBusService()) {
-            return null;
-        }
 
-        // reset (belt-n-braces)
-        currentInteraction.set(null);
-
-        final ObjectAdapter[] argumentAdapters = argumentAdaptersFrom(ic);
         final ActionDomainEvent<?> event =
                 domainEventHelper.postEventForAction(
-                        eventType(), null, null, AbstractDomainEvent.Phase.DISABLE,
-                        getIdentified(), ic.getTarget(), argumentAdapters, null);
+                        AbstractDomainEvent.Phase.DISABLE,
+                        eventType(), null,
+                        actionFrom(ic), getIdentified(),
+                        ic.getTarget(), ic.getMixedIn(), argumentAdaptersFrom(ic),
+                        null,
+                        null);
         if (event != null && event.isDisabled()) {
+            final TranslatableString reasonTranslatable = event.getDisabledReasonTranslatable();
+            if(reasonTranslatable != null) {
+                return reasonTranslatable.translate(translationService, translationContext);
+            }
             return event.getDisabledReason();
+
         }
         return null;
+    }
+
+    private static ObjectAction actionFrom(final InteractionContext<?> ic) {
+        if(!(ic instanceof ActionInteractionContext)) {
+            throw new IllegalStateException(
+                    "Expecting ic to be of type ActionInteractionContext, instead was: " + ic);
+        }
+        return ((ActionInteractionContext) ic).getObjectAction();
     }
 
     private static ObjectAdapter[] argumentAdaptersFrom(final InteractionContext<? extends InteractionEvent> ic) {
@@ -114,25 +125,25 @@ public abstract class ActionDomainEventFacetAbstract
     }
 
     @Override
-    public String invalidates(ValidityContext<? extends ValidityEvent> ic) {
-        if(!domainEventHelper.hasEventBusService()) {
-            return null;
-        }
+    public String invalidates(final ValidityContext<? extends ValidityEvent> ic) {
 
-        // reset (belt-n-braces)
-        currentInteraction.set(null);
-
-        final ActionInvocationContext aic = (ActionInvocationContext) ic;
+        final ActionValidityContext aic = (ActionValidityContext) ic;
         final ActionDomainEvent<?> event =
                 domainEventHelper.postEventForAction(
-                        eventType(), null, null, AbstractDomainEvent.Phase.VALIDATE,
-                        getIdentified(), ic.getTarget(), aic.getArgs(), null);
+                        AbstractDomainEvent.Phase.VALIDATE,
+                        eventType(), null,
+                        actionFrom(ic), getIdentified(),
+                        ic.getTarget(), ic.getMixedIn(), aic.getArgs(),
+                        null,
+                        null);
         if (event != null && event.isInvalid()) {
+            final TranslatableString reasonTranslatable = event.getInvalidityReasonTranslatable();
+            if(reasonTranslatable != null) {
+                return reasonTranslatable.translate(translationService, translationContext);
+            }
             return event.getInvalidityReason();
         }
 
-        // make available for next phases (executing/executed)
-        currentInteraction.set(event);
         return null;
     }
 
@@ -140,9 +151,6 @@ public abstract class ActionDomainEventFacetAbstract
         return value();
     }
 
-    /**
-     * For testing only.
-     */
     public Class<? extends ActionDomainEvent<?>> getEventType() {
         //noinspection unchecked
         return eventType();
